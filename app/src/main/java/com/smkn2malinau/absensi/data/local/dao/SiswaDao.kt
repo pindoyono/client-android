@@ -19,8 +19,17 @@ interface SiswaDao {
     @Query("SELECT * FROM siswa_cache WHERE siswa_id = :siswaId")
     suspend fun getSiswaById(siswaId: Int): SiswaCache?
 
+    @Query("SELECT * FROM siswa_cache")
+    suspend fun getSemuaSiswa(): List<SiswaCache>
+
     @Query("SELECT * FROM embedding_cache")
     fun getAllEmbeddings(): Flow<List<EmbeddingCache>>
+
+    @Query("SELECT * FROM embedding_cache")
+    suspend fun getSemuaEmbedding(): List<EmbeddingCache>
+
+    @Query("SELECT * FROM embedding_cache WHERE siswa_id = :siswaId")
+    suspend fun getEmbeddingById(siswaId: Int): EmbeddingCache?
 
     @Query("DELETE FROM siswa_cache WHERE siswa_id = :siswaId")
     suspend fun deleteSiswa(siswaId: Int)

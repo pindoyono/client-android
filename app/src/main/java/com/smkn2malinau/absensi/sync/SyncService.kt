@@ -10,7 +10,10 @@ interface SyncRepository {
     suspend fun updateAbsensi(absensi: AbsensiLokal)
     suspend fun insertSiswa(siswa: SiswaCache)
     suspend fun deleteSiswa(siswaId: Int)
+    suspend fun insertEmbedding(embedding: EmbeddingCache)
+    suspend fun deleteEmbedding(siswaId: Int)
     suspend fun insertDispensasi(dispensasi: DispensasiCache)
+    suspend fun insertJadwal(jadwal: JadwalCache)
     suspend fun getUnsyncedOverrides(): List<JadwalOverrideLokal>
     suspend fun updateOverrideLokal(override: JadwalOverrideLokal)
     suspend fun insertSyncEvent(log: SyncEventLog)
@@ -70,6 +73,7 @@ class SyncService(
             }
 
             val embeddingResponse = api.getEmbeddings()
+            val nowIso = LocalDateTime.now().format(fmt)
             for (dto in embeddingResponse.siswaList) {
                 if (dto.aktif) {
                     repo.insertSiswa(
@@ -80,9 +84,44 @@ class SyncService(
                             kelas = dto.kelas
                         )
                     )
+                    val b64 = dto.embeddingBase64
+                    if (!b64.isNullOrBlank()) {
+                        try {
+                            repo.insertEmbedding(
+                                EmbeddingCache(
+                                    siswa_id = dto.siswaId,
+                                    embedding_encrypted = java.util.Base64.getDecoder().decode(b64),
+                                    model_version = dto.modelVersion,
+                                    diperbarui_pada = nowIso
+                                )
+                            )
+                        } catch (e: IllegalArgumentException) {
+                            // base64 rusak — lewati, jangan gagalkan seluruh siklus sync
+                        }
+                    }
                 } else {
                     repo.deleteSiswa(dto.siswaId)
+                    repo.deleteEmbedding(dto.siswaId)
                 }
+            }
+
+            try {
+                val jadwalResponse = api.getJadwalEfektif()
+                for (dto in jadwalResponse.jadwalList) {
+                    repo.insertJadwal(
+                        JadwalCache(
+                            kelas = dto.kelas,
+                            tanggal = dto.tanggal,
+                            hari = dto.hari,
+                            jam_masuk = dto.jamMasuk,
+                            jam_pulang = dto.jamPulang,
+                            sumber = dto.sumber,
+                            ditarik_pada = nowIso
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                // jadwal opsional — jangan gagalkan siklus sync
             }
 
             val dispensasiResponse = api.getDispensasiAktif()

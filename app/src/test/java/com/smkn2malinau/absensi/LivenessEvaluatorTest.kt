@@ -82,4 +82,44 @@ class LivenessEvaluatorTest {
         val b = floatArrayOf(0f, 1f, 0f, 0f)
         assertFalse(LivenessEvaluator.cocokkanWajah(a, b, 0.3542f))
     }
+
+    // --- PRD bagian 3: verifikasi cocokkanWajah pakai definisi DISTANCE, bukan similarity mentah ---
+
+    /**
+     * Buat vektor 2D dengan cosine similarity persis = [sim] terhadap (1, 0).
+     */
+    private fun vektorDenganSimilarity(sim: Float): FloatArray {
+        val y = kotlin.math.sqrt((1f - sim * sim).coerceAtLeast(0f))
+        return floatArrayOf(sim, y)
+    }
+
+    @Test
+    fun `cocokkan wajah - similarity 0_9 (distance 0_1) COCOK`() {
+        val a = floatArrayOf(1f, 0f)
+        val b = vektorDenganSimilarity(0.9f)
+        assertEquals(0.1f, LivenessEvaluator.jarakWajah(a, b), 0.001f)
+        assertTrue(LivenessEvaluator.cocokkanWajah(a, b, 0.3542f))
+    }
+
+    @Test
+    fun `cocokkan wajah - similarity 0_6 (distance 0_4) TIDAK COCOK`() {
+        val a = floatArrayOf(1f, 0f)
+        val b = vektorDenganSimilarity(0.6f)
+        assertEquals(0.4f, LivenessEvaluator.jarakWajah(a, b), 0.001f)
+        // Kalau bug lama masih ada (similarity >= 0.3542), ini akan salah lolos jadi true.
+        assertFalse(LivenessEvaluator.cocokkanWajah(a, b, 0.3542f))
+    }
+
+    @Test
+    fun `cocokkan wajah - similarity persis di ambang distance TIDAK COCOK`() {
+        val a = floatArrayOf(1f, 0f)
+        val b = vektorDenganSimilarity(1f - 0.3542f) // distance == 0.3542, bukan < 0.3542
+        assertFalse(LivenessEvaluator.cocokkanWajah(a, b, 0.3542f))
+    }
+
+    @Test
+    fun `cocokkan wajah - ukuran beda atau kosong tidak cocok`() {
+        assertFalse(LivenessEvaluator.cocokkanWajah(floatArrayOf(), floatArrayOf(), 0.3542f))
+        assertFalse(LivenessEvaluator.cocokkanWajah(floatArrayOf(1f, 0f), floatArrayOf(1f), 0.3542f))
+    }
 }

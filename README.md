@@ -20,13 +20,24 @@ app/src/main/java/com/smkn2malinau/absensi/
 │   └── remote/         # Retrofit + DeviceAuthInterceptor + RateLimiter
 ├── business/           # AttendanceLogic (state machine PRD 3)
 ├── face/               # FaceEngine + LivenessEvaluator + CryptoEmbedding
+├── repository/         # AbsensiRepository — glue business logic <-> DAO (PRD 4)
 ├── sync/               # SyncService + SyncWorker (WorkManager)
 ├── audit/              # AuditLogger + LivenessLogger
 ├── backup/             # BackupManager
 ├── validation/         # Validation (regex port dari Windows)
 ├── security/           # CredentialManager (Android Keystore)
-└── ui/                 # KioskScreen + theme
+├── util/               # NetworkMonitor (status jaringan sungguhan)
+└── ui/                 # KioskScreen + KioskViewModel + CameraView + theme
 ```
+
+## Alur Kiosk (PRD bagian 4)
+
+`CameraView` (CameraX) → `KioskViewModel.onFrameCaptured()` → `FaceEngine.prosesFrame()`
+→ `AbsensiRepository.cariSiswaCocok()` (cosine **distance**, PRD 3) → `AttendanceLogic.hitungHasil()`
+→ `AbsensiRepository.simpanAbsensi()` (hanya bila `ON_SITE_TESTING_SELESAI = true`) → `KioskUiState`.
+
+`SyncWorker` dijadwalkan dari `AbsensiApp.onCreate()` (periodik 15 menit, butuh jaringan).
+Jam & status jaringan di UI di-update sungguhan (bukan hardcode).
 
 ## Setup
 
@@ -71,8 +82,15 @@ Ubah ke `true` hanya setelah uji lapangan fisik selesai (PRD bagian 10).
 
 ## Test
 
+Unit (JVM — `./gradlew test`):
+
 - `AttendanceLogicTest` — tabel skenario PRD 3.4
-- `LivenessEvaluatorTest` — evaluasi liveness murni (tanpa kamera)
+- `LivenessEvaluatorTest` — evaluasi liveness + `cocokkanWajah` pakai definisi **distance** (PRD 3)
 - `ApiClientTest` — MockWebServer, verifikasi header auth
-- `SyncServiceTest` — offline/partial sync scenarios
+- `SyncServiceTest` — gagal-sebagian, push override, embeddings/jadwal mendarat di repo
+- `KioskViewModelTest` — E2E capture→keputusan→simpan + gerbang uji lapangan (PRD 4, 5, 10)
 - `ValidationTest` — regex port dari Windows
+
+Instrumented (`./gradlew connectedAndroidTest`):
+
+- `AbsensiRepositoryDaoTest` — constraint `UNIQUE(siswa_id,tanggal,type)`, `jadwalEfektif`, `statusHariIni`

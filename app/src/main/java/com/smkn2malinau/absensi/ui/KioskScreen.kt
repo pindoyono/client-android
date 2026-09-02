@@ -45,7 +45,10 @@ enum class StatusHasil {
 }
 
 @Composable
-fun KioskScreen(state: KioskUiState) {
+fun KioskScreen(
+    state: KioskUiState,
+    cameraContent: @Composable () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -58,6 +61,7 @@ fun KioskScreen(state: KioskUiState) {
             modifier = Modifier.weight(1f),
             contentAlignment = Alignment.Center
         ) {
+            cameraContent()
             HasilScanCard(state.hasilTerakhir)
         }
         FooterHint()

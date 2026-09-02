@@ -30,4 +30,7 @@ interface JadwalDao {
 
     @Query("SELECT * FROM dispensasi_cache WHERE siswa_id = :siswaId AND tanggal = :tanggal AND jenis = :jenis")
     suspend fun getDispensasiAktif(siswaId: Int, tanggal: String, jenis: String): DispensasiCache?
+
+    @Query("SELECT * FROM dispensasi_cache WHERE siswa_id = :siswaId AND tanggal = :tanggal")
+    suspend fun getDispensasiHariIni(siswaId: Int, tanggal: String): List<DispensasiCache>
 }

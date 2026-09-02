@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.local.dao.*
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
     entities = [
@@ -43,8 +43,8 @@ abstract class AbsensiDatabase : RoomDatabase() {
                 )
                 
                 if (passphrase != null) {
-                    val factory = SupportFactory(passphrase)
-                    builder.openHelperFactory(factory)
+                    System.loadLibrary("sqlcipher")
+                    builder.openHelperFactory(SupportOpenHelperFactory(passphrase))
                 }
 
                 val instance = builder.build()
