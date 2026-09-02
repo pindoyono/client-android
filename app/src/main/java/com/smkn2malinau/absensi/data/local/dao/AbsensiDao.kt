@@ -1,15 +1,15 @@
 package com.smkn2malinau.absensi.data.local.dao
 
-import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
-import androidx.room.Query
+import androidx.room.*
 import com.smkn2malinau.absensi.data.local.entity.AbsensiLokal
 
 @Dao
 interface AbsensiDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAbsensi(absensi: AbsensiLokal)
+
+    @Update
+    suspend fun updateAbsensi(absensi: AbsensiLokal)
 
     @Query("SELECT * FROM absensi_lokal WHERE siswa_id = :siswaId AND tanggal = :tanggal")
     suspend fun getAbsensiHariIni(siswaId: Int, tanggal: String): List<AbsensiLokal>

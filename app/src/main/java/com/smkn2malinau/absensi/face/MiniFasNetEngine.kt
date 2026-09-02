@@ -9,27 +9,34 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.FloatBuffer
 
 /**
  * Implementasi FaceEngine menggunakan ONNX Runtime Mobile.
- * Model: minifasnet.onnx + arcface.onnx di app/src/main/assets/models/
+ * Mengelola dua sesi: satu untuk liveness (MiniFasNet) dan satu untuk embedding (ArcFace).
  */
 class MiniFasNetEngine(context: Context) : FaceEngine {
 
     private var env: OrtEnvironment? = null
-    private var session: OrtSession? = null
+    private var livenessSession: OrtSession? = null
+    private var embeddingSession: OrtSession? = null
     private val appContext = context.applicationContext
 
-    override suspend fun loadModel(modelPath: String) {
+    override suspend fun loadModels(livenessModelPath: String, embeddingModelPath: String) {
         withContext(Dispatchers.IO) {
             try {
-                val modelFile = copyAssetToCache(modelPath)
                 env = OrtEnvironment.getEnvironment()
                 val options = OrtSession.SessionOptions()
-                session = env?.createSession(modelFile.absolutePath, options)
-                Log.d("MiniFasNetEngine", "Model loaded: $modelPath")
+                
+                val livenessFile = copyAssetToCache(livenessModelPath)
+                livenessSession = env?.createSession(livenessFile.absolutePath, options)
+                
+                val embeddingFile = copyAssetToCache(embeddingModelPath)
+                embeddingSession = env?.createSession(embeddingFile.absolutePath, options)
+                
+                Log.d("MiniFasNetEngine", "Models loaded successfully")
             } catch (e: Exception) {
-                Log.e("MiniFasNetEngine", "Failed to load model", e)
+                Log.e("MiniFasNetEngine", "Failed to load models", e)
                 throw e
             }
         }
@@ -39,16 +46,17 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
         return withContext(Dispatchers.IO) {
             try {
                 val ortEnv = env ?: return@withContext null
-                val ortSession = session ?: return@withContext null
+                val session = embeddingSession ?: return@withContext null
 
-                // Preprocess bitmap to tensor (dummy 512-dim embedding placeholder)
-                // Real implementation: face detection → align → embed
-                val input = FloatArray(512)
-                val shape = longArrayOf(1, 512)
+                // Preprocess placeholder (ArcFace usually takes 112x112)
+                val input = FloatArray(112 * 112 * 3)
+                val shape = longArrayOf(1, 3, 112, 112)
+                val floatBuffer = FloatBuffer.wrap(input)
 
-                OnnxTensor.createTensor(ortEnv, input, shape).use { tensor ->
-                    val result = ortSession.run(mapOf(ortSession.inputNames.iterator().next() to tensor))
-                    result.get(0) as? FloatArray
+                OnnxTensor.createTensor(ortEnv, floatBuffer, shape).use { tensor ->
+                    val result = session.run(mapOf(session.inputNames.iterator().next() to tensor))
+                    val output = result.get(0).value as? Array<FloatArray>
+                    output?.get(0)
                 }
             } catch (e: Exception) {
                 Log.e("MiniFasNetEngine", "Embedding extraction failed", e)
@@ -57,9 +65,33 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
         }
     }
 
-    override suspend fun detectFace(bitmapBytes: ByteArray): FaceDetectionResult? {
-        // Placeholder — real detection uses minifasnet.onnx
-        return FaceDetectionResult(floatArrayOf(0f, 0f, 1f, 1f), 0.9f)
+    override suspend fun detectLiveness(bitmapBytes: ByteArray): LivenessResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ortEnv = env ?: return@withContext null
+                val session = livenessSession ?: return@withContext null
+
+                // Preprocess placeholder (MiniFasNet usually takes 80x80)
+                val input = FloatArray(80 * 80 * 3)
+                val shape = longArrayOf(1, 3, 80, 80)
+                val floatBuffer = FloatBuffer.wrap(input)
+
+                OnnxTensor.createTensor(ortEnv, floatBuffer, shape).use { tensor ->
+                    val result = session.run(mapOf(session.inputNames.iterator().next() to tensor))
+                    val output = result.get(0).value as? Array<FloatArray>
+                    val score = output?.get(0)?.get(0) ?: 0f
+                    
+                    LivenessResult(
+                        score = score,
+                        isReal = LivenessEvaluator.evaluasiLiveness(floatArrayOf(score)),
+                        confidence = score
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("MiniFasNetEngine", "Liveness detection failed", e)
+                null
+            }
+        }
     }
 
     private fun copyAssetToCache(assetPath: String): File {

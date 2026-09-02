@@ -2,7 +2,7 @@ package com.smkn2malinau.absensi.audit
 
 import android.util.Log
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
-import com.smkn2malinau.absensi.data.local.entity.LivenessLogEntity
+import com.smkn2malinau.absensi.data.local.entity.LivenessLog
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -22,22 +22,22 @@ class LivenessLogger(private val db: AbsensiDatabase, private val deviceId: Stri
         livenessScore: Double,
         ambangSaatItu: Double,
         alasanGagal: String? = null,
-        siswaId: Long? = null
+        siswaId: Int? = null
     ) {
         val now = LocalDateTime.now().format(fmt)
         try {
             db.logDao().insertLiveness(
-                LivenessLogEntity(
+                LivenessLog(
                     timestamp = now,
-                    frameId = frameId,
-                    wajahTerdeteksi = wajahTerdeteksi,
-                    isReal = isReal,
-                    livenessScore = livenessScore,
-                    ambangSaatItu = ambangSaatItu,
-                    alasanGagal = alasanGagal,
-                    siswaId = siswaId,
-                    deviceId = deviceId,
-                    createdAt = now
+                    frame_id = frameId,
+                    wajah_terdeteksi = if (wajahTerdeteksi) 1 else 0,
+                    is_real = if (isReal) 1 else 0,
+                    liveness_score = livenessScore,
+                    ambang_saat_itu = ambangSaatItu,
+                    alasan_gagal = alasanGagal,
+                    siswa_id = siswaId,
+                    device_id = deviceId,
+                    created_at = now
                 )
             )
         } catch (e: Exception) {

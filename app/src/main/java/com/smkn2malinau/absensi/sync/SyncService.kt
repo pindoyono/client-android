@@ -1,31 +1,22 @@
 package com.smkn2malinau.absensi.sync
 
 import com.smkn2malinau.absensi.data.local.entity.*
-import com.smkn2malinau.absensi.data.remote.ApiService
-import com.smkn2malinau.absensi.data.remote.SyncAbsensiRequest
+import com.smkn2malinau.absensi.data.remote.*
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/**
- * Abstraksi repository untuk SyncService — supaya SyncService bisa diuji
- * tanpa Android framework (Room). PRD bagian 9.
- */
 interface SyncRepository {
-    suspend fun getUnsyncedRecords(): List<AbsensiLokalEntity>
-    suspend fun updateAbsensi(absensi: AbsensiLokalEntity)
-    suspend fun insertSiswa(siswa: SiswaCacheEntity)
-    suspend fun deleteSiswa(siswaId: Long)
-    suspend fun insertDispensasi(dispensasi: DispensasiCacheEntity)
-    suspend fun getUnsyncedOverrides(): List<JadwalOverrideLokalEntity>
-    suspend fun updateOverrideLokal(override: JadwalOverrideLokalEntity)
-    suspend fun insertSyncEvent(log: SyncEventLogEntity)
-    suspend fun insertLiveness(log: LivenessLogEntity)
+    suspend fun getUnsyncedRecords(): List<AbsensiLokal>
+    suspend fun updateAbsensi(absensi: AbsensiLokal)
+    suspend fun insertSiswa(siswa: SiswaCache)
+    suspend fun deleteSiswa(siswaId: Int)
+    suspend fun insertDispensasi(dispensasi: DispensasiCache)
+    suspend fun getUnsyncedOverrides(): List<JadwalOverrideLokal>
+    suspend fun updateOverrideLokal(override: JadwalOverrideLokal)
+    suspend fun insertSyncEvent(log: SyncEventLog)
+    suspend fun insertLiveness(log: LivenessLog)
 }
 
-/**
- * SyncService — logika murni, tidak bergantung Android framework.
- * PRD bagian 9.1–9.3.
- */
 class SyncService(
     private val repo: SyncRepository,
     private val api: ApiService,
@@ -42,154 +33,140 @@ class SyncService(
         var errorMessage: String? = null
 
         try {
-            // 1. Push unsynced absensi records
             val unsynced = repo.getUnsyncedRecords()
             if (unsynced.isNotEmpty()) {
                 batchCount++
                 val dtoList = unsynced.map {
                     AbsensiRecordDto(
-                        recordId = it.recordId,
-                        siswaId = it.siswaId,
+                        recordId = it.record_id,
+                        siswaId = it.siswa_id,
                         tanggal = it.tanggal,
                         type = it.type,
-                        jamAktual = it.jamAktual,
-                        statusKehadiranOtomatis = it.statusKehadiranOtomatis,
+                        jamAktual = it.jam_aktual,
+                        statusKehadiranOtomatis = it.status_kehadiran_otomatis,
                         catatan = it.catatan,
-                        deviceId = it.deviceId
+                        deviceId = it.device_id
                     )
                 }
                 val response = api.syncAbsensi(SyncAbsensiRequest(dtoList))
                 for (record in unsynced) {
-                    if (response.diterima.contains(record.recordId)) {
+                    if (response.diterima.contains(record.record_id)) {
                         repo.updateAbsensi(
-                            record.copy(synced = 1, syncStatus = "ok", percobaanSync = record.percobaanSync + 1)
+                            record.copy(synced = 1, sync_status = "ok", percobaan_sync = record.percobaan_sync + 1)
                         )
                         successCount++
-                    } else if (response.duplikat.contains(record.recordId)) {
+                    } else if (response.duplikat.contains(record.record_id)) {
                         repo.updateAbsensi(
-                            record.copy(synced = 1, syncStatus = "duplikat", percobaanSync = record.percobaanSync + 1)
+                            record.copy(synced = 1, sync_status = "duplikat", percobaan_sync = record.percobaan_sync + 1)
                         )
                         duplicateCount++
                     } else {
                         repo.updateAbsensi(
-                            record.copy(synced = 0, syncStatus = "gagal", percobaanSync = record.percobaanSync + 1)
+                            record.copy(synced = 0, sync_status = "gagal", percobaan_sync = record.percobaan_sync + 1)
                         )
                         failCount++
                     }
                 }
             }
 
-            // 2. Pull embeddings (hapus siswa nonaktif — PRD 9.2)
             val embeddingResponse = api.getEmbeddings()
             for (dto in embeddingResponse.siswaList) {
                 if (dto.aktif) {
                     repo.insertSiswa(
-                        SiswaCacheEntity(
-                            siswaId = dto.siswaId,
+                        SiswaCache(
+                            siswa_id = dto.siswaId,
                             nis = dto.nis,
                             nama = dto.nama,
                             kelas = dto.kelas
                         )
                     )
                 } else {
-                    // Hapus siswa nonaktif
                     repo.deleteSiswa(dto.siswaId)
                 }
             }
 
-            // 3. Pull dispensasi
             val dispensasiResponse = api.getDispensasiAktif()
             for (dto in dispensasiResponse.dispensasiList) {
                 repo.insertDispensasi(
-                    DispensasiCacheEntity(
-                        siswaId = dto.siswaId,
+                    DispensasiCache(
+                        siswa_id = dto.siswaId,
                         tanggal = dto.tanggal,
                         jenis = dto.jenis,
                         kategori = dto.kategori,
-                        alasan = dto.alasan
+                        alasan = dto.alasan ?: ""
                     )
                 )
             }
 
-            // 4. Push local overrides (PRD 9.1)
             val unsyncedOverrides = repo.getUnsyncedOverrides()
             for (override in unsyncedOverrides) {
-                if (override.statusPush == "ditolak") continue // jangan retry yang ditolak permanen
+                if (override.status_push == "ditolak") continue
                 try {
                     val response = api.pushOverride(
-                        com.smkn2malinau.absensi.data.remote.PushOverrideRequest(
+                        PushOverrideRequest(
                             clientId = override.id,
                             tanggal = override.tanggal,
                             kelas = override.kelas,
-                            jamMasuk = override.jamMasuk,
-                            jamPulang = override.jamPulang,
+                            jamMasuk = override.jam_masuk,
+                            jamPulang = override.jam_pulang,
                             alasan = override.alasan
                         )
                     )
                     if (response.status == "ok") {
                         repo.updateOverrideLokal(
-                            override.copy(terkirim = 1, statusPush = "ok")
+                            override.copy(terkirim = 1, status_push = "ok")
                         )
                     } else {
                         repo.updateOverrideLokal(
-                            override.copy(terkirim = 1, statusPush = "ditolak", pesanPush = response.pesan)
+                            override.copy(terkirim = 1, status_push = "ditolak", pesan_push = response.pesan)
                         )
                     }
                 } catch (e: Exception) {
-                    // Network error — jangan tandai terkirim, coba lagi nanti
                 }
             }
 
-            // 5. Lapor kesehatan (PRD 9.3) — wrapped, tidak gagalkan siklus
             try {
-                val jadwalJamLalu = System.currentTimeMillis() - startTime
                 api.reportHealth(
                     deviceId,
-                    com.smkn2malinau.absensi.data.remote.HealthReportRequest(
-                        jadwalJamLalu = jadwalJamLalu,
+                    HealthReportRequest(
+                        jadwalJamLalu = (System.currentTimeMillis() - startTime) / 3600000,
                         dispensasiJamLalu = 0L
                     )
                 )
-            } catch (e: Exception) {
-                // Kegagalan lapor kesehatan TIDAK menggagalkan siklus — hanya di-log
-            }
+            } catch (e: Exception) {}
 
-            // Log sync event
+            val nowStr = LocalDateTime.now().format(fmt)
             repo.insertSyncEvent(
-                SyncEventLogEntity(
-                    timestamp = LocalDateTime.now().format(fmt),
-                    durationMs = System.currentTimeMillis() - startTime,
+                SyncEventLog(
+                    timestamp = nowStr,
+                    duration_ms = System.currentTimeMillis() - startTime,
                     status = "success",
-                    batchCount = batchCount,
-                    successCount = successCount,
-                    duplicateCount = duplicateCount,
-                    failCount = failCount,
-                    errorMessage = null,
-                    deviceId = deviceId,
-                    createdAt = LocalDateTime.now().format(fmt)
+                    batch_count = batchCount,
+                    success_count = successCount,
+                    duplicate_count = duplicateCount,
+                    fail_count = failCount,
+                    error_message = null,
+                    device_id = deviceId,
+                    created_at = nowStr
                 )
             )
 
-            return SyncResult.Success(
-                batchCount = batchCount,
-                successCount = successCount,
-                duplicateCount = duplicateCount,
-                failCount = failCount
-            )
+            return SyncResult.Success(batchCount, successCount, duplicateCount, failCount)
         } catch (e: Exception) {
             errorMessage = e.message
+            val nowStr = LocalDateTime.now().format(fmt)
             repo.insertSyncEvent(
-                SyncEventLogEntity(
-                    timestamp = LocalDateTime.now().format(fmt),
-                    durationMs = System.currentTimeMillis() - startTime,
+                SyncEventLog(
+                    timestamp = nowStr,
+                    duration_ms = System.currentTimeMillis() - startTime,
                     status = "failed",
-                    batchCount = batchCount,
-                    successCount = successCount,
-                    duplicateCount = duplicateCount,
-                    failCount = failCount,
-                    errorMessage = errorMessage,
-                    deviceId = deviceId,
-                    createdAt = LocalDateTime.now().format(fmt)
+                    batch_count = batchCount,
+                    success_count = successCount,
+                    duplicate_count = duplicateCount,
+                    fail_count = failCount,
+                    error_message = errorMessage,
+                    device_id = deviceId,
+                    created_at = nowStr
                 )
             )
             return SyncResult.Failure(errorMessage)

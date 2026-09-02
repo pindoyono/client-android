@@ -31,10 +31,10 @@ class SyncWorker(
 
             val passphrase = credentialManager.getDbPassphrase()
             val db = AbsensiDatabase.getDatabase(applicationContext, passphrase)
-        val repo = SyncRepositoryImpl(db)
-        val api = ApiClientProvider.create(deviceId, apiKey)
+            val repo = SyncRepositoryImpl(db)
+            val api = ApiClientProvider.create(deviceId, apiKey)
 
-        val syncService = SyncService(repo, api, deviceId)
+            val syncService = SyncService(repo, api, deviceId)
             val result = syncService.runSyncCycle()
 
             when (result) {

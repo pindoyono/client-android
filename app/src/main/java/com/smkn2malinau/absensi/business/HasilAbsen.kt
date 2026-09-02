@@ -1,40 +1,13 @@
 package com.smkn2malinau.absensi.business
 
-/**
- * Enum hasil absensi — sesuai PRD bagian 3.
- */
 enum class HasilAbsen {
-    BERHASIL_MASUK,
-    BERHASIL_PULANG,
-    DITOLAK_SUDAH_ABSEN,
+    BERHASIL_MASUK_NORMAL,
+    BERHASIL_MASUK_TERLAMBAT,
+    BERHASIL_PULANG_NORMAL,
+    BERHASIL_PULANG_CEPAT,
     DITOLAK_BELUM_WAKTUNYA_MASUK,
-    DITOLAK_BELUM_WAKTUNYA_PULANG
-}
-
-/**
- * Detail hasil keputusan absensi.
- */
-data class DetailHasilAbsen(
-    val hasil: HasilAbsen,
-    val kategoriWaktu: KategoriWaktu? = null,
-    val kategoriDispensasi: String? = null,
-    val catatan: String? = null
-)
-
-/**
- * Kategori waktu kehadiran.
- */
-enum class KategoriWaktu {
-    NORMAL,
-    TERLAMBAT,
-    DISPENSASI
-}
-
-/**
- * Status absensi harian siswa.
- */
-enum class StatusAbsen {
-    BELUM_ABSEN,
-    SUDAH_MASUK,
-    SUDAH_PULANG
+    DITOLAK_BELUM_WAKTUNYA_PULANG,
+    DITOLAK_SUDAH_ABSEN_LENGKAP,
+    DITOLAK_TIDAK_DIKENAL,
+    ERROR_DATABASE
 }

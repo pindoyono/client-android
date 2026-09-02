@@ -1,97 +1,65 @@
 package com.smkn2malinau.absensi.backup
 
 import android.content.Context
+import android.util.Log
+import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.security.SecureRandom
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
- * Backup manager — backup terenkripsi database lokal berkala.
- * Setara database/backup.py Windows.
+ * BackupManager — backup terenkripsi database lokal berkala.
+ * Setara database/backup.py Windows (PRD bagian 6).
  */
 class BackupManager(private val context: Context) {
 
-    private val backupDir = File(context.filesDir, "backups")
-    private val keyAlias = "absensi_backup_key"
-
-    init {
-        if (!backupDir.exists()) backupDir.mkdirs()
-    }
+    private val fmt = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
 
     /**
-     * Buat backup terenkripsi dari database.
-     * @return path file backup atau null jika gagal
+     * Menyalin file database ke direktori backup.
+     * Karena menggunakan SQLCipher, file database sudah terenkripsi di disk.
      */
-    fun createBackup(dbFile: File): String? {
+    fun performBackup(): Boolean {
         return try {
-            val key = getOrCreateKey()
-            val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-            cipher.init(Cipher.ENCRYPT_MODE, key, IvParameterSpec(iv))
+            val dbName = "absensi.db"
+            val dbFile = context.getDatabasePath(dbName)
+            
+            if (!dbFile.exists()) {
+                Log.w("BackupManager", "Database file does not exist")
+                return false
+            }
 
-            val backupFile = File(backupDir, "absensi_backup_${System.currentTimeMillis()}.enc")
+            val backupDir = File(context.getExternalFilesDir(null), "backups")
+            if (!backupDir.exists()) backupDir.mkdirs()
+
+            val timestamp = LocalDateTime.now().format(fmt)
+            val backupFile = File(backupDir, "absensi_backup_$timestamp.db")
+
             FileInputStream(dbFile).use { input ->
                 FileOutputStream(backupFile).use { output ->
-                    // Write IV first
-                    output.write(iv)
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        val encrypted = cipher.update(buffer, 0, bytesRead)
-                        if (encrypted != null) output.write(encrypted)
-                    }
-                    val final = cipher.doFinal()
-                    if (final != null) output.write(final)
+                    input.copyTo(output)
                 }
             }
-            backupFile.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
 
-    /**
-     * Restore dari file backup terenkripsi.
-     */
-    fun restoreBackup(backupPath: String, targetDbFile: File): Boolean {
-        return try {
-            val key = getOrCreateKey()
-            val backupFile = File(backupPath)
-            val iv = ByteArray(16)
-            FileInputStream(backupFile).use { input ->
-                input.read(iv)
-                val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-                cipher.init(Cipher.DECRYPT_MODE, key, IvParameterSpec(iv))
-                FileOutputStream(targetDbFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        val decrypted = cipher.update(buffer, 0, bytesRead)
-                        if (decrypted != null) output.write(decrypted)
-                    }
-                    val final = cipher.doFinal()
-                    if (final != null) output.write(final)
-                }
-            }
+            // Hapus backup lama (sisakan 5 terakhir)
+            cleanOldBackups(backupDir)
+
+            Log.i("BackupManager", "Backup successful: ${backupFile.absolutePath}")
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("BackupManager", "Backup failed", e)
             false
         }
     }
 
-    private fun getOrCreateKey(): SecretKey {
-        // Simplified: generate key once and store in memory
-        // In production, use Android Keystore
-        val keyGen = KeyGenerator.getInstance("AES")
-        keyGen.init(256)
-        return keyGen.generateKey()
+    private fun cleanOldBackups(backupDir: File) {
+        val files = backupDir.listFiles()?.sortedByDescending { it.lastModified() } ?: return
+        if (files.size > 5) {
+            for (i in 5 until files.size) {
+                files[i].delete()
+            }
+        }
     }
 }

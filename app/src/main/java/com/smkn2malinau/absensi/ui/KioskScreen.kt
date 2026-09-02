@@ -140,20 +140,19 @@ private fun HasilScanCard(hasil: HasilScan?) {
     }
 
     val (bgColor, textColor, label) = when (hasil.status) {
-        StatusHasil.BERHASIL_TEPAT_WAKTU -> Pair(AbsensiColors.SuksesBg, AbsensiColors.SuksesTeks, "Tepat waktu")
-        StatusHasil.BERHASIL_TERLAMBAT -> Pair(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Terlambat")
-        StatusHasil.BERHASIL_PULANG_DISPENSASI -> Pair(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Pulang dengan izin")
-        StatusHasil.DITOLAK_SUDAH_ABSEN -> Pair(AbsensiColors.BahayaBg, AbsensiColors.BahayaTeks, "Ditolak")
-        StatusHasil.DITOLAK_BELUM_WAKTUNYA -> Pair(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Belum waktunya")
-        StatusHasil.WAJAH_TIDAK_DIKENALI -> Pair(AbsensiColors.NetralBg, AbsensiColors.NetralTeks, "Tidak dikenali")
-        StatusHasil.OFFLINE -> Pair(AbsensiColors.NetralBg, AbsensiColors.NetralTeks, "Offline")
+        StatusHasil.BERHASIL_TEPAT_WAKTU -> Triple(AbsensiColors.SuksesBg, AbsensiColors.SuksesTeks, "Tepat waktu")
+        StatusHasil.BERHASIL_TERLAMBAT -> Triple(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Terlambat")
+        StatusHasil.BERHASIL_PULANG_DISPENSASI -> Triple(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Pulang dengan izin")
+        StatusHasil.DITOLAK_SUDAH_ABSEN -> Triple(AbsensiColors.BahayaBg, AbsensiColors.BahayaTeks, "Ditolak")
+        StatusHasil.DITOLAK_BELUM_WAKTUNYA -> Triple(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Belum waktunya")
+        StatusHasil.WAJAH_TIDAK_DIKENALI -> Triple(AbsensiColors.NetralBg, AbsensiColors.NetralTeks, "Tidak dikenali")
+        StatusHasil.OFFLINE -> Triple(AbsensiColors.NetralBg, AbsensiColors.NetralTeks, "Offline")
     }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.padding(24.dp)
     ) {
-        // Avatar placeholder
         Box(
             modifier = Modifier
                 .size(160.dp)

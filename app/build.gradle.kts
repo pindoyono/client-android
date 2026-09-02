@@ -2,16 +2,17 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.smkn2malinau.absensi"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.smkn2malinau.absensi"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
 
@@ -45,10 +46,6 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -71,10 +68,10 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     // Room + SQLCipher (PRD bagian 7)
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
+    implementation("net.zetetic:sqlcipher-android:4.17.0")
 
     // Retrofit + OkHttp (PRD bagian 4 & 8)
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -85,18 +82,21 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // CameraX (PRD bagian 5)
-    implementation("androidx.camera:camera-camera2:1.3.4")
-    implementation("androidx.camera:camera-lifecycle:1.3.4")
-    implementation("androidx.camera:camera-view:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
 
     // ONNX Runtime Mobile (PRD bagian 5)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
 
     // Android Keystore wrapper (PRD bagian 5)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // DataStore for SharedPreferences alternative
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
+
+    // 16 KB page-size aligned native libs
+    implementation("androidx.graphics:graphics-path:1.1.0")
 
     // Test
     testImplementation("junit:junit:4.13.2")

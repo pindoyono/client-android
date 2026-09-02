@@ -2,7 +2,7 @@ package com.smkn2malinau.absensi.audit
 
 import android.util.Log
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
-import com.smkn2malinau.absensi.data.local.entity.DeviceAuditLogEntity
+import com.smkn2malinau.absensi.data.local.entity.DeviceAuditLog
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -18,23 +18,23 @@ class AuditLogger(private val db: AbsensiDatabase, private val deviceId: String)
         eventType: String,
         actor: String,
         action: String,
-        details: String? = null,
+        details: String = "",
         status: String = "success",
         errorMessage: String? = null
     ) {
         val now = LocalDateTime.now().format(fmt)
         try {
             db.logDao().insertAudit(
-                DeviceAuditLogEntity(
+                DeviceAuditLog(
                     timestamp = now,
-                    eventType = eventType,
+                    event_type = eventType,
                     actor = actor,
                     action = action,
                     details = details,
                     status = status,
-                    errorMessage = errorMessage,
-                    deviceId = deviceId,
-                    createdAt = now
+                    error_message = errorMessage,
+                    device_id = deviceId,
+                    created_at = now
                 )
             )
         } catch (e: Exception) {
@@ -42,12 +42,11 @@ class AuditLogger(private val db: AbsensiDatabase, private val deviceId: String)
         }
     }
 
-    // Helper methods untuk event umum
     suspend fun logLogin(actor: String, success: Boolean) {
         log("LOGIN", actor, "login", status = if (success) "success" else "failed")
     }
 
-    suspend fun logEnrollment(siswaId: Long, success: Boolean) {
+    suspend fun logEnrollment(siswaId: Int, success: Boolean) {
         log("ENROLLMENT", "admin", "enroll_siswa", details = "siswa_id=$siswaId",
             status = if (success) "success" else "failed")
     }
@@ -56,7 +55,7 @@ class AuditLogger(private val db: AbsensiDatabase, private val deviceId: String)
         log("SYNC", "system", "sync_start")
     }
 
-    suspend fun logSyncComplete(success: Boolean, message: String? = null) {
+    suspend fun logSyncComplete(success: Boolean, message: String = "") {
         log("SYNC", "system", "sync_complete", details = message,
             status = if (success) "success" else "failed")
     }

@@ -7,7 +7,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 object ApiClientProvider {
-    private const val BASE_URL = "https://api.example.com/" // replace with real endpoint
+    private const val BASE_URL = "https://absen.smkn2malinau.sch.id/" // replace with real endpoint
 
     fun create(
         deviceId: String,

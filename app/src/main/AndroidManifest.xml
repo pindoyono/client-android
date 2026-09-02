@@ -13,9 +13,7 @@
     <application
         android:name=".AbsensiApp"
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
         android:label="Absensi SMKN 2 Malinau"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AbsensiClientAndroid"
         tools:targetApi="34">
