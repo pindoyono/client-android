@@ -27,6 +27,12 @@ interface SyncRepository {
     suspend fun insertLiveness(log: LivenessLog)
     /** Seed akun login offline dari `GET /auth/roster` (PRD R-P1-2). */
     suspend fun seedAkunRoster(guru: List<RosterItemDto>)
+    /**
+     * Seed cache siswa dari roster lengkap `GET /siswa` — termasuk siswa yang
+     * BELUM enroll wajah (yang tak dikirim `GET /embeddings/sync`). Membuang
+     * baris versi-server yang tak lagi ada di roster & belum pernah enroll.
+     */
+    suspend fun seedSiswaRoster(siswa: List<SiswaRosterDto>)
     /** Umur cache lokal untuk `POST /device/{id}/health`. */
     suspend fun kesehatanCache(): KesehatanCache
 }
@@ -132,6 +138,15 @@ class SyncService(
             // Enroll lokal (id negatif) yang NIS-nya kini ada di server → hapus,
             // supaya matching tidak dobel dengan baris versi server.
             if (adaSiswaServer) repo.hapusEnrollLokalTertimpa()
+
+            // --- 2b. Tarik roster siswa LENGKAP (termasuk yang belum enroll) ---
+            // /embeddings/sync hanya kirim siswa ber-embedding; roster ini yang
+            // mengisi layar "Data Siswa" & pilihan Enrollment dengan semua siswa.
+            try {
+                repo.seedSiswaRoster(api.getSiswaRoster(null, null))
+            } catch (e: Exception) {
+                // server lama tak izinkan GET /siswa device-auth — abaikan.
+            }
 
             // --- 3. Tarik jadwal efektif: umum (kelas NULL) + tiap kelas ---
             try {

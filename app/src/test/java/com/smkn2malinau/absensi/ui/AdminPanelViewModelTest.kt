@@ -124,6 +124,8 @@ class AdminPanelViewModelTest {
         override suspend fun resetOverrideDitolak(): Int = resetCount
         override suspend fun daftarSiswaLokal(): List<SiswaLokalRow> =
             listOf(SiswaLokalRow(1, "23001", "Budi", "XI-E", terEnroll = true, lokal = false))
+        override suspend fun tarikSiswaDariServer(api: com.smkn2malinau.absensi.data.remote.ApiService) =
+            com.smkn2malinau.absensi.repository.SiswaTarikHasil(0, 0, 0)
         override suspend fun tesDekripsiEmbedding(faceKey: String): Pair<Int, Int> = 0 to 0
     }
 }

@@ -4,6 +4,8 @@ import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.AbsensiLokal
 import com.smkn2malinau.absensi.data.local.entity.JadwalCache
 import com.smkn2malinau.absensi.data.local.entity.JadwalOverrideLokal
+import com.smkn2malinau.absensi.data.local.entity.SiswaCache
+import com.smkn2malinau.absensi.data.remote.ApiService
 import com.smkn2malinau.absensi.face.CryptoEmbedding
 import java.time.LocalDateTime
 import java.util.UUID
@@ -26,9 +28,26 @@ interface AdminRepository {
 
     suspend fun daftarSiswaLokal(): List<SiswaLokalRow>
 
+    /**
+     * Tarik roster siswa LENGKAP dari server (`GET /siswa`, device-auth) lalu
+     * segarkan cache lokal — termasuk siswa yang belum enroll wajah (yang tidak
+     * dikirim `GET /embeddings/sync`). Dipakai tombol "Tarik dari server" di
+     * layar Data Siswa.
+     */
+    suspend fun tarikSiswaDariServer(api: ApiService): SiswaTarikHasil
+
     /** Uji `faceKey` terhadap embedding cache. @return (total, berhasil didekripsi). */
     suspend fun tesDekripsiEmbedding(faceKey: String): Pair<Int, Int>
 }
+
+data class SiswaTarikHasil(
+    /** Jumlah siswa aktif dari server yang disimpan/diperbarui di cache. */
+    val disimpan: Int,
+    /** Dari [disimpan], berapa yang sudah enroll wajah (menurut server). */
+    val terEnroll: Int,
+    /** Jumlah baris siswa lama yang dibuang (tak lagi di roster & belum enroll). */
+    val dinonaktifkan: Int,
+)
 
 data class StatistikSync(
     val totalAbsensi: Int,
@@ -104,6 +123,31 @@ class AdminRepositoryImpl(private val db: AbsensiDatabase) : AdminRepository {
     override suspend fun hapusOverrideLokal(id: String) = db.jadwalDao().deleteOverrideLokal(id)
 
     override suspend fun resetOverrideDitolak(): Int = db.jadwalDao().resetOverrideDitolak()
+
+    override suspend fun tarikSiswaDariServer(api: ApiService): SiswaTarikHasil {
+        val siswaDao = db.siswaDao()
+        val roster = api.getSiswaRoster(null, null)
+
+        siswaDao.insertSiswa(
+            roster.map { SiswaCache(siswa_id = it.id, nis = it.nis, nama = it.nama, kelas = it.kelas) }
+        )
+
+        // Buang baris versi-server (id > 0) yang tak lagi ada di roster DAN belum
+        // pernah enroll (tak punya embedding). Yang ber-embedding diurus
+        // /embeddings/sync lewat flag aktif=false.
+        val idRoster = roster.map { it.id }.toSet()
+        val punyaEmbedding = siswaDao.getSemuaEmbedding().map { it.siswa_id }.toSet()
+        val dibuang = siswaDao.getSemuaSiswa()
+            .filter { it.siswa_id > 0 && it.siswa_id !in idRoster && it.siswa_id !in punyaEmbedding }
+            .map { it.siswa_id }
+        dibuang.forEach { siswaDao.deleteSiswa(it) }
+
+        return SiswaTarikHasil(
+            disimpan = roster.size,
+            terEnroll = roster.count { it.enrolled },
+            dinonaktifkan = dibuang.size,
+        )
+    }
 
     override suspend fun tesDekripsiEmbedding(faceKey: String): Pair<Int, Int> {
         val rows = db.siswaDao().getSemuaEmbedding()

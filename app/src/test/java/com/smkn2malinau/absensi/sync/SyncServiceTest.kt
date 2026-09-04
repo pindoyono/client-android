@@ -164,6 +164,20 @@ class SyncServiceTest {
     }
 
     @Test
+    fun `roster siswa lengkap di-seed ke cache siswa`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(siswaRosterResponse = listOf(
+            SiswaRosterDto(id = 1, nis = "23001", nama = "Ani", kelas = "XI-E", enrolled = true),
+            SiswaRosterDto(id = 2, nis = "23002", nama = "Budi", kelas = "XI-E", enrolled = false),
+        ))
+
+        SyncService(repo, api, "d").runSyncCycle()
+
+        assertEquals(2, repo.siswaRosterDiseed.size)
+        assertEquals(setOf("23001", "23002"), repo.siswaRosterDiseed.map { it.nis }.toSet())
+    }
+
+    @Test
     fun `sync gagal total - insertSyncEvent status failed dan SyncResult Failure`() = runTest {
         val repo = FakeSyncRepo()
         val api = FakeApi(throwOnEmbeddings = true)
@@ -190,6 +204,7 @@ class SyncServiceTest {
         private val dispensasiResponse: List<DispensasiDto> = emptyList(),
         private val pushResponse: PushOverrideResponse = PushOverrideResponse(),
         private val rosterResponse: RosterResponse = RosterResponse(),
+        private val siswaRosterResponse: List<SiswaRosterDto> = emptyList(),
         private val throwOnEmbeddings: Boolean = false,
     ) : ApiService {
         var lastSyncRequest: SyncAbsensiRequest? = null
@@ -221,6 +236,7 @@ class SyncServiceTest {
         }
         override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = HealthReportResponse("ok")
         override suspend fun getRoster() = rosterResponse
+        override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = siswaRosterResponse
     }
 
     private class FakeSyncRepo(
@@ -254,6 +270,8 @@ class SyncServiceTest {
         override suspend fun insertLiveness(log: LivenessLog) {}
         val rosterDiseed = mutableListOf<com.smkn2malinau.absensi.data.remote.RosterItemDto>()
         override suspend fun seedAkunRoster(guru: List<com.smkn2malinau.absensi.data.remote.RosterItemDto>) { rosterDiseed.addAll(guru) }
+        val siswaRosterDiseed = mutableListOf<com.smkn2malinau.absensi.data.remote.SiswaRosterDto>()
+        override suspend fun seedSiswaRoster(siswa: List<com.smkn2malinau.absensi.data.remote.SiswaRosterDto>) { siswaRosterDiseed.addAll(siswa) }
         override suspend fun kesehatanCache() = KesehatanCache()
     }
 }

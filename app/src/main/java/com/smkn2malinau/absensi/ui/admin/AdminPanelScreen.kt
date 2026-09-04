@@ -140,7 +140,7 @@ fun AdminPanelScreen(
                 when (seksi) {
                     Seksi.SINKRONISASI -> SinkronisasiPane(state, { viewModel.syncSekarang(context) }, viewModel::refresh)
                     Seksi.JADWAL -> JadwalPane(state, viewModel::tambahOverrideLokal, viewModel::hapusOverrideLokal, viewModel::resetPushDitolak)
-                    Seksi.DATA_SISWA -> DataSiswaPane(state)
+                    Seksi.DATA_SISWA -> DataSiswaPane(state, viewModel::tarikSiswaDariServer, viewModel::refresh)
                     Seksi.AKUN -> AkunPane()
                     Seksi.ENROLLMENT -> Unit // ditangani di atas (layar penuh)
                     Seksi.PERANGKAT -> AdminScreen(onSaveSuccess = { viewModel.refresh() }, onOpenEnrollment = { seksi = Seksi.ENROLLMENT })
@@ -337,7 +337,11 @@ private fun BarisOverride(o: JadwalOverrideLokal, onHapus: (String) -> Unit) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun DataSiswaPane(state: AdminPanelUiState) {
+private fun DataSiswaPane(
+    state: AdminPanelUiState,
+    onTarikServer: () -> Unit,
+    onMuatUlang: () -> Unit,
+) {
     var cari by remember { mutableStateOf("") }
     val terfilter = remember(cari, state.siswa) {
         if (cari.isBlank()) state.siswa
@@ -345,6 +349,21 @@ private fun DataSiswaPane(state: AdminPanelUiState) {
     }
     Column(Modifier.fillMaxSize().padding(Spasi.lg), verticalArrangement = Arrangement.spacedBy(Spasi.md)) {
         JudulPane("Data Siswa", "${state.siswa.size} siswa ter-cache di kiosk (matching offline).")
+
+        Row(horizontalArrangement = Arrangement.spacedBy(Spasi.sm), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onTarikServer, enabled = !state.sedangTarikSiswa) {
+                if (state.sedangTarikSiswa) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    Spacer(Modifier.width(Spasi.sm))
+                } else {
+                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(Spasi.sm))
+                }
+                Text("Tarik dari server")
+            }
+            OutlinedButton(onClick = onMuatUlang, enabled = !state.sedangTarikSiswa) { Text("Muat ulang") }
+        }
+
         OutlinedTextField(cari, { cari = it }, label = { Text("Cari nama / NIS / kelas") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         if (terfilter.isEmpty()) {
             Text("Tidak ada siswa.", style = MaterialTheme.typography.bodyMedium, color = AbsensiColors.InkMuted)

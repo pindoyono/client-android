@@ -56,6 +56,19 @@ data class SiswaEmbeddingDto(
 )
 
 /**
+ * Item `GET /siswa` (device-auth) — roster siswa aktif LENGKAP, termasuk yang
+ * belum enroll wajah. Dipakai layar "Data Siswa" & Enrollment di kiosk;
+ * `GET /embeddings/sync` hanya mengirim siswa yang sudah punya embedding.
+ */
+data class SiswaRosterDto(
+    @SerializedName("id") val id: Int,
+    @SerializedName("nis") val nis: String,
+    @SerializedName("nama") val nama: String,
+    @SerializedName("kelas") val kelas: String,
+    @SerializedName("enrolled") val enrolled: Boolean = false,
+)
+
+/**
  * Response `GET /jadwal/efektif?kelas=` — SATU objek untuk kelas yang diminta
  * (`{ sumber, jam_masuk, jam_pulang, alasan }`). `sumber = "tidak_ada_sekolah"`
  * saat akhir pekan (jam null).

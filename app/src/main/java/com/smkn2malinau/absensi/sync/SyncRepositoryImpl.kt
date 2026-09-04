@@ -3,6 +3,7 @@ package com.smkn2malinau.absensi.sync
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.RosterItemDto
+import com.smkn2malinau.absensi.data.remote.SiswaRosterDto
 import java.time.Duration
 import java.time.LocalDateTime
 
@@ -51,6 +52,20 @@ class SyncRepositoryImpl(private val db: AbsensiDatabase) : SyncRepository {
                 )
             )
         }
+    }
+
+    override suspend fun seedSiswaRoster(siswa: List<SiswaRosterDto>) {
+        if (siswa.isEmpty()) return
+        val siswaDao = db.siswaDao()
+        siswaDao.insertSiswa(siswa.map { SiswaCache(siswa_id = it.id, nis = it.nis, nama = it.nama, kelas = it.kelas) })
+        // Buang baris versi-server (id > 0) yang tak lagi ada di roster DAN belum
+        // pernah enroll (tak punya embedding). Yang ber-embedding diurus
+        // /embeddings/sync lewat flag aktif=false — jangan disentuh di sini.
+        val idRoster = siswa.map { it.id }.toSet()
+        val punyaEmbedding = siswaDao.getSemuaEmbedding().map { it.siswa_id }.toSet()
+        siswaDao.getSemuaSiswa()
+            .filter { it.siswa_id > 0 && it.siswa_id !in idRoster && it.siswa_id !in punyaEmbedding }
+            .forEach { siswaDao.deleteSiswa(it.siswa_id) }
     }
 
     override suspend fun kesehatanCache(): KesehatanCache {

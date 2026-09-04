@@ -46,4 +46,11 @@ interface ApiService {
     // 7. Roster guru untuk seed login offline (device-auth)
     @GET("auth/roster")
     suspend fun getRoster(): RosterResponse
+
+    // 8. Roster siswa aktif LENGKAP (device-auth) — termasuk yang belum enroll wajah
+    @GET("siswa")
+    suspend fun getSiswaRoster(
+        @Query("kelas") kelas: String? = null,
+        @Query("enrolled") enrolled: Boolean? = null,
+    ): List<SiswaRosterDto>
 }

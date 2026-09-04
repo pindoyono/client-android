@@ -130,5 +130,6 @@ class DeviceRegistrarTest {
         override suspend fun pushOverride(request: PushOverrideRequest) = error("n/a")
         override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = error("n/a")
         override suspend fun getRoster() = error("n/a")
+        override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = error("n/a")
     }
 }

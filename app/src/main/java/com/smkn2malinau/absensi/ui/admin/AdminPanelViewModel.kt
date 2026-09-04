@@ -30,6 +30,7 @@ data class AdminPanelUiState(
     val overrideLokal: List<JadwalOverrideLokal> = emptyList(),
     val siswa: List<SiswaLokalRow> = emptyList(),
     val sedangSync: Boolean = false,
+    val sedangTarikSiswa: Boolean = false,
     val pesan: String? = null,
     val pesanError: Boolean = false,
     val serverUrl: String = "",
@@ -105,6 +106,37 @@ class AdminPanelViewModel(
                     siswa = siswa,
                 )
             }
+        }
+    }
+
+    /**
+     * Tarik data siswa dari server sekarang juga (tanpa menunggu siklus sync penuh).
+     * Butuh device sudah terdaftar (device_id + api key).
+     */
+    fun tarikSiswaDariServer() {
+        if (_uiState.value.sedangTarikSiswa) return
+        val deviceId = credentialManager.getDeviceId()
+        val apiKey = credentialManager.getApiKey()
+        if (deviceId == null || apiKey == null) {
+            return pesanError("Device belum terdaftar — daftarkan perangkat dulu di menu Perangkat.")
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(sedangTarikSiswa = true, pesan = "Menarik data siswa dari server…", pesanError = false) }
+            val api = com.smkn2malinau.absensi.data.remote.ApiClientProvider.create(
+                deviceId, apiKey, credentialManager.getServerBaseUrl(),
+            )
+            runCatching { repo.tarikSiswaDariServer(api) }
+                .onSuccess { h ->
+                    val ekor = buildList {
+                        add("${h.disimpan} siswa")
+                        add("${h.terEnroll} sudah enroll")
+                        if (h.dinonaktifkan > 0) add("${h.dinonaktifkan} dibuang")
+                    }.joinToString(" · ")
+                    pesanSukses("Data siswa diperbarui dari server: $ekor.")
+                    refresh()
+                }
+                .onFailure { pesanError("Gagal menarik data siswa: ${it.message ?: it.javaClass.simpleName}") }
+            _uiState.update { it.copy(sedangTarikSiswa = false) }
         }
     }
 
