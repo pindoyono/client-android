@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Baca konfigurasi lokal (tidak di-commit). Dipakai untuk BuildConfig di bawah.
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun localOrDefault(key: String, default: String): String =
+    (localProps.getProperty(key) ?: (project.findProperty(key) as String?) ?: default)
 
 android {
     namespace = "com.smkn2malinau.absensi"
@@ -20,6 +30,27 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Google OAuth Web Client ID (audience untuk Google ID token) — samakan
+        // dengan GOOGLE_CLIENT_ID di client Windows. Isi di local.properties:
+        //   GOOGLE_WEB_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+        buildConfigField(
+            "String", "GOOGLE_WEB_CLIENT_ID",
+            "\"${localOrDefault("GOOGLE_WEB_CLIENT_ID", "")}\""
+        )
+        // Base URL server — bisa di-override dari local.properties (SERVER_BASE_URL=)
+        buildConfigField(
+            "String", "SERVER_BASE_URL",
+            "\"${localOrDefault("SERVER_BASE_URL", "https://absen.smkn2malinau.sch.id/")}\""
+        )
+        // Fernet key embedding wajah — HARUS sama dengan FACE_ENCRYPTION_KEY server
+        // (`cryptography.fernet`, 32 byte base64url). Isi di local.properties:
+        //   FACE_ENCRYPTION_KEY=<44 karakter base64url>
+        // Bisa juga di-set runtime di layar Setup Device (disimpan di Keystore).
+        buildConfigField(
+            "String", "FACE_ENCRYPTION_KEY",
+            "\"${localOrDefault("FACE_ENCRYPTION_KEY", "")}\""
+        )
     }
 
     buildTypes {
@@ -44,6 +75,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
@@ -61,6 +93,8 @@ dependencies {
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.09.00"))
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -82,6 +116,11 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
+    // Google Sign-In via Credential Manager (registrasi device — setara OAuth Windows)
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
     // WorkManager (PRD bagian 9)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 
@@ -92,6 +131,10 @@ dependencies {
 
     // ONNX Runtime Mobile (PRD bagian 5)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
+
+    // ML Kit Face Detection — bundled model (offline, tanpa Play Services)
+    // untuk crop wajah sebelum MiniFasNet/ArcFace (setara Haar cascade client Windows).
+    implementation("com.google.mlkit:face-detection:16.1.7")
 
     // Android Keystore wrapper (PRD bagian 5)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

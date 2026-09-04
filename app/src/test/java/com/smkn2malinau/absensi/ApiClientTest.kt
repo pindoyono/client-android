@@ -51,14 +51,14 @@ class ApiClientTest {
     // Verifikasi header X-Device-Id + X-Device-Api-Key terkirim
     @Test
     fun `header auth terkirim di semua panggilan`() = runBlocking {
-        server.enqueue(MockResponse().setBody("""{"status":"ok","diterima":[],"duplikat":[],"gagal":[]}"""))
+        server.enqueue(MockResponse().setBody("""{"total":0,"disimpan":0,"duplikat":0,"gagal":0,"hasil":[]}"""))
 
         api.syncAbsensi(
             SyncAbsensiRequest(
                 records = listOf(
                     AbsensiRecordDto(
                         recordId = "r1", siswaId = 1, tanggal = "2024-01-15",
-                        type = "MASUK", jamAktual = "06:30",
+                        type = "MASUK", jamAktual = "2024-01-15T06:30:00",
                         statusKehadiranOtomatis = "NORMAL", catatan = null,
                         deviceId = "device_01"
                     )
@@ -98,18 +98,18 @@ class ApiClientTest {
         }
     }
 
-    // Test: field aktif dari /embeddings/sync terbaca benar
+    // Test: field aktif dari /embeddings/sync terbaca benar (kontrak server: {server_time, jumlah, data})
     @Test
     fun `field aktif dari embeddings sync terbaca`() = runBlocking {
         server.enqueue(
             MockResponse().setBody(
-                """{"siswa":[{"siswa_id":1,"nis":"23145","nama":"Ahmad","kelas":"XI-E","embedding_base64":null,"model_version":"v1","aktif":true},{"siswa_id":2,"nis":"23146","nama":"Budi","kelas":"XI-E","embedding_base64":null,"model_version":"v1","aktif":false}]}"""
+                """{"server_time":"2026-09-04T00:00:00","jumlah":2,"data":[{"siswa_id":1,"nis":"23145","nama":"Ahmad","kelas":"XI-E","aktif":true,"embedding_encrypted":"0a0b","model_version":"v1"},{"siswa_id":2,"nis":"23146","nama":"Budi","kelas":"XI-E","aktif":false,"embedding_encrypted":"0a0b","model_version":"v1"}]}"""
             )
         )
 
-        val response = api.getEmbeddings()
-        assertEquals(2, response.siswaList.size)
-        assertTrue(response.siswaList[0].aktif)
-        assertFalse(response.siswaList[1].aktif)
+        val response = api.getEmbeddings(null)
+        assertEquals(2, response.data.size)
+        assertTrue(response.data[0].aktif)
+        assertFalse(response.data[1].aktif)
     }
 }

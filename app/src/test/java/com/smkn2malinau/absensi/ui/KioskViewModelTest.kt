@@ -9,7 +9,11 @@ import com.smkn2malinau.absensi.face.HasilDeteksiWajah
 import com.smkn2malinau.absensi.face.LivenessResult
 import com.smkn2malinau.absensi.repository.AbsensiRepository
 import com.smkn2malinau.absensi.repository.SiswaCocok
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -45,6 +49,24 @@ class KioskViewModelTest {
         alasanGagal = null
     )
 
+    /**
+     * `KioskViewModel.init` menjalankan beberapa loop `while (isActive)` di
+     * `viewModelScope` (jam, ringkasan sync, reset kartu). `viewModelScope`
+     * memakai `Dispatchers.Main` = scheduler `runTest` yang sama, jadi
+     * `runTest` akan hang selamanya di `advanceUntilIdle` bila loop itu tidak
+     * dibatalkan. Bungkus tiap test supaya scope VM dibatalkan sebelum selesai.
+     */
+    private val vmsAktif = mutableListOf<KioskViewModel>()
+
+    private fun runVmTest(body: suspend TestScope.() -> Unit) = runTest {
+        try {
+            body()
+        } finally {
+            vmsAktif.forEach { it.viewModelScope.cancel() }
+            vmsAktif.clear()
+        }
+    }
+
     private fun vm(
         deteksi: HasilDeteksiWajah,
         repo: FakeRepo,
@@ -57,10 +79,10 @@ class KioskViewModelTest {
         onSiteTestingSelesai = { onSiteTestingSelesai },
         jamProvider = { jam },
         tanggalProvider = { LocalDate.of(2026, 9, 2) },
-    )
+    ).also { vmsAktif += it }
 
     @Test
-    fun `wajah dikenali dan mode testing SELESAI - absensi tersimpan`() = runTest {
+    fun `wajah dikenali dan mode testing SELESAI - absensi tersimpan`() = runVmTest {
         val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
         val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true)
 
@@ -73,7 +95,7 @@ class KioskViewModelTest {
     }
 
     @Test
-    fun `GERBANG uji lapangan - onSiteTestingSelesai FALSE - wajah dikenali tapi TIDAK tersimpan`() = runTest {
+    fun `GERBANG uji lapangan - onSiteTestingSelesai FALSE - wajah dikenali tapi TIDAK tersimpan`() = runVmTest {
         val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
         val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = false)
 
@@ -86,7 +108,7 @@ class KioskViewModelTest {
     }
 
     @Test
-    fun `wajah tidak dikenali - tidak menyimpan`() = runTest {
+    fun `wajah tidak dikenali - tidak menyimpan`() = runVmTest {
         val repo = FakeRepo(match = SiswaCocok(ditemukan = false), jadwal = jadwalStandar)
         val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true)
 
@@ -97,7 +119,7 @@ class KioskViewModelTest {
     }
 
     @Test
-    fun `liveness gagal - tidak menyimpan`() = runTest {
+    fun `liveness gagal - tidak menyimpan`() = runVmTest {
         val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
         val deteksi = deteksiSukses().copy(lolosLiveness = false, embedding = null, alasanGagal = "gagal_liveness")
         val vm = vm(deteksi, repo, onSiteTestingSelesai = true)
@@ -109,7 +131,7 @@ class KioskViewModelTest {
     }
 
     @Test
-    fun `sudah absen lengkap - DITOLAK dan tidak menyimpan`() = runTest {
+    fun `sudah absen lengkap - DITOLAK dan tidak menyimpan`() = runVmTest {
         val repo = FakeRepo(
             match = cocok(),
             jadwal = jadwalStandar,
@@ -124,7 +146,7 @@ class KioskViewModelTest {
     }
 
     @Test
-    fun `pulang cepat dengan dispensasi - status_kehadiran_otomatis = kategori dispensasi`() = runTest {
+    fun `pulang cepat dengan dispensasi - status_kehadiran_otomatis = kategori dispensasi`() = runVmTest {
         val repo = FakeRepo(
             match = cocok(),
             jadwal = jadwalStandar,
@@ -145,7 +167,7 @@ class KioskViewModelTest {
     }
 
     @Test
-    fun `jadwal belum tersedia - tidak menyimpan`() = runTest {
+    fun `jadwal belum tersedia - tidak menyimpan`() = runVmTest {
         val repo = FakeRepo(match = cocok(), jadwal = null)
         val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true)
 
@@ -153,6 +175,26 @@ class KioskViewModelTest {
 
         assertTrue(repo.disimpan.isEmpty())
         assertEquals(StatusHasil.DITOLAK_BELUM_WAKTUNYA, vm.uiState.value.hasilTerakhir?.status)
+    }
+
+    @Test
+    fun `pil status ONLINE hanya bila siklus sync terakhir sukses`() = runVmTest {
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar, sinkronSukses = true)
+        val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true)
+
+        advanceTimeBy(2) // biarkan loop ringkasan + network collector jalan sekali
+
+        assertEquals(StatusJaringan.ONLINE, vm.uiState.value.statusJaringan)
+    }
+
+    @Test
+    fun `pil status SINKRON_TERTUNDA bila siklus sync terakhir gagal walau jaringan ada`() = runVmTest {
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar, sinkronSukses = false)
+        val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true)
+
+        advanceTimeBy(2)
+
+        assertEquals(StatusJaringan.SINKRON_TERTUNDA, vm.uiState.value.statusJaringan)
     }
 
     // --- helpers ---
@@ -177,6 +219,7 @@ class KioskViewModelTest {
         private val status: AttendanceLogic.StatusAbsensi = AttendanceLogic.StatusAbsensi(false, false),
         private val dispensasi: DispensasiCache? = null,
         private val simpanBerhasil: Boolean = true,
+        private val sinkronSukses: Boolean = false,
     ) : AbsensiRepository {
         val disimpan = mutableListOf<Disimpan>()
 
@@ -190,5 +233,11 @@ class KioskViewModelTest {
             disimpan.add(Disimpan(siswaId, hasil, statusKehadiranOtomatis, catatan))
             return simpanBerhasil
         }
+
+        override suspend fun ringkasanKiosk(tanggal: String) = com.smkn2malinau.absensi.repository.RingkasanKiosk(
+            jadwalHariIni = jadwal,
+            sinkronTerakhirSukses = sinkronSukses,
+            pernahSinkron = true,
+        )
     }
 }

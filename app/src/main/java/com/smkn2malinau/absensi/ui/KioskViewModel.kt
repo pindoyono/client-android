@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.smkn2malinau.absensi.business.AttendanceLogic
 import com.smkn2malinau.absensi.business.HasilAbsen
 import com.smkn2malinau.absensi.face.FaceEngine
+import com.smkn2malinau.absensi.face.LivenessEvaluator
 import com.smkn2malinau.absensi.repository.AbsensiRepository
+import com.smkn2malinau.absensi.repository.RingkasanKiosk
 import com.smkn2malinau.absensi.repository.SiswaCocok
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +37,10 @@ class KioskViewModel(
     private val onSiteTestingSelesai: () -> Boolean,
     private val jamProvider: () -> LocalTime = { LocalTime.now() },
     private val tanggalProvider: () -> LocalDate = { LocalDate.now() },
+    /** Ambang *distance* face-matching — bisa dikalibrasi runtime dari Panel Admin. */
+    private val ambangJarak: Float = LivenessEvaluator.AMBANG_JARAK_DEFAULT,
+    /** Picu satu siklus sync (mis. `SyncWorker.enqueueSekali`) — dipanggil tiap absen tersimpan + berkala. */
+    private val picuSinkron: () -> Unit = {},
     /** Pemuatan model ONNX — dijalankan sekali saat ViewModel dibuat. */
     private val muatModel: suspend () -> Unit = {},
 ) : ViewModel() {
@@ -47,6 +53,11 @@ class KioskViewModel(
     private val sedangProses = AtomicBoolean(false)
     @Volatile private var terakhirDiprosesMs = 0L
     @Volatile private var hasilTampilSampaiMs = 0L
+
+    // Dua sinyal penyusun pil status kiri-atas (jaringan + hasil siklus sync terakhir).
+    @Volatile private var jaringanOnline = true
+    @Volatile private var sinkronTerakhirSukses = false
+    @Volatile private var picuSinkronTerakhirMs = 0L
 
     init {
         viewModelScope.launch {
@@ -63,12 +74,11 @@ class KioskViewModel(
                 delay(1000)
             }
         }
-        // Status jaringan sungguhan dari NetworkMonitor (bukan konstanta ONLINE).
+        // Status jaringan sungguhan dari NetworkMonitor — digabung dgn hasil siklus sync.
         viewModelScope.launch {
             onlineFlow.collect { online ->
-                _uiState.update {
-                    it.copy(statusJaringan = if (online) StatusJaringan.ONLINE else StatusJaringan.OFFLINE)
-                }
+                jaringanOnline = online
+                _uiState.update { it.copy(statusJaringan = hitungStatusJaringan()) }
             }
         }
         // Reset kartu hasil setelah beberapa detik supaya kiosk siap scan berikutnya.
@@ -82,6 +92,64 @@ class KioskViewModel(
                 }
             }
         }
+        // Status bar sinkronisasi (jam masuk/pulang, badge kesegaran, ringkasan sync).
+        viewModelScope.launch {
+            while (isActive) {
+                runCatching { repo.ringkasanKiosk(tanggalProvider().toString()) }
+                    .onFailure { Log.w("KioskViewModel", "Gagal memuat ringkasan kiosk", it) }
+                    .getOrNull()
+                    ?.let { r -> _uiState.update { it.terapkanRingkasan(r) } }
+                delay(RINGKASAN_REFRESH_MS)
+            }
+        }
+        // Picu sync berkala selama kiosk aktif — WorkManager periodik minimal 15 mnt,
+        // jadi ini yang bikin absen naik ke server dlm ~1-2 menit (mirip loop 45 dtk Windows).
+        viewModelScope.launch {
+            while (isActive) {
+                delay(SINKRON_BERKALA_MS)
+                picuSinkronDebounce()
+            }
+        }
+    }
+
+    /** Panggil `picuSinkron` paling sering tiap PICU_SINKRON_MIN_MS (hindari thrash saat absen beruntun). */
+    private fun picuSinkronDebounce() {
+        val now = System.currentTimeMillis()
+        if (now - picuSinkronTerakhirMs < PICU_SINKRON_MIN_MS) return
+        picuSinkronTerakhirMs = now
+        runCatching { picuSinkron() }
+    }
+
+    private fun KioskUiState.terapkanRingkasan(r: RingkasanKiosk): KioskUiState {
+        sinkronTerakhirSukses = r.sinkronTerakhirSukses
+        return copy(
+            statusJaringan = hitungStatusJaringan(),
+            ringkasanSync = RingkasanSyncUi(
+                waktuTeks = r.syncTerakhir?.format(SYNC_FMT) ?: "belum pernah",
+                antreKirim = r.antreKirim,
+                jumlahWajah = r.jumlahWajah,
+                jumlahJadwal = r.jumlahJadwal,
+            ),
+            jadwalMasuk = r.jadwalHariIni?.jamMasuk?.format(JAM_FMT),
+            jadwalPulang = r.jadwalHariIni?.jamPulang?.format(JAM_FMT),
+            kesegaran = when {
+                !r.kesegaran.diketahui -> KesegaranUi.TIDAK_DIKETAHUI
+                r.kesegaran.segar -> KesegaranUi.SEGAR
+                else -> KesegaranUi.BASI
+            },
+            dataBasi = r.kesegaran.dataBasi,
+        )
+    }
+
+    /**
+     * Pil status: OFFLINE bila tak ada jaringan; ONLINE hanya bila siklus sync
+     * terakhir sukses; selain itu SINKRON_TERTUNDA (jaringan ada tapi sync
+     * gagal / belum jalan) — jadi "tersinkron" benar-benar berarti tersinkron.
+     */
+    private fun hitungStatusJaringan(): StatusJaringan = when {
+        !jaringanOnline -> StatusJaringan.OFFLINE
+        sinkronTerakhirSukses -> StatusJaringan.ONLINE
+        else -> StatusJaringan.SINKRON_TERTUNDA
     }
 
     fun refreshModeTesting() {
@@ -115,9 +183,15 @@ class KioskViewModel(
             return
         }
 
-        val match: SiswaCocok = repo.cariSiswaCocok(deteksi.embedding)
+        val match: SiswaCocok = repo.cariSiswaCocok(deteksi.embedding, ambangJarak)
         if (!match.ditemukan) {
-            tampilkan(HasilScan(StatusHasil.WAJAH_TIDAK_DIKENALI))
+            val diagnostik = when {
+                match.jumlahDibandingkan == 0 ->
+                    "Tidak ada data wajah terbaca — cek FACE_ENCRYPTION_KEY & sinkronisasi"
+                match.jarak == Float.MAX_VALUE -> ""
+                else -> "Terdekat ${"%.2f".format(match.jarak)} dari ambang ${"%.2f".format(ambangJarak)} · ${match.jumlahDibandingkan} wajah dibanding"
+            }
+            tampilkan(HasilScan(StatusHasil.WAJAH_TIDAK_DIKENALI, diagnostik = diagnostik))
             return
         }
 
@@ -153,10 +227,11 @@ class KioskViewModel(
             // GERBANG UJI LAPANGAN (PRD bagian 10): mode testing => JANGAN simpan ke DB.
             if (onSiteTestingSelesai()) {
                 tersimpan = repo.simpanAbsensi(match.siswaId, hasil, statusOtomatis, dispensasi?.alasan)
+                if (tersimpan) picuSinkronDebounce() // kirim ke server secepatnya
             }
         }
 
-        tampilkan(petakan(hasil, match, tersimpan))
+        tampilkan(petakan(hasil, match, tersimpan, jadwal))
     }
 
     private fun tampilkan(hasil: HasilScan) {
@@ -164,7 +239,12 @@ class KioskViewModel(
         _uiState.update { it.copy(hasilTerakhir = hasil) }
     }
 
-    private fun petakan(hasil: HasilAbsen, match: SiswaCocok, tersimpan: Boolean): HasilScan {
+    private fun petakan(
+        hasil: HasilAbsen,
+        match: SiswaCocok,
+        tersimpan: Boolean,
+        jadwal: AttendanceLogic.JadwalEfektif,
+    ): HasilScan {
         val modeTesting = !onSiteTestingSelesai()
         val status = when (hasil) {
             HasilAbsen.BERHASIL_MASUK_NORMAL, HasilAbsen.BERHASIL_PULANG_NORMAL -> StatusHasil.BERHASIL_TEPAT_WAKTU
@@ -178,6 +258,14 @@ class KioskViewModel(
             hasil.berhasil() && modeTesting -> "Dikenali (mode testing — tidak disimpan)"
             hasil.berhasil() && tersimpan -> "Absen tersimpan"
             hasil.berhasil() && !tersimpan -> "Sudah absen hari ini"
+            hasil == HasilAbsen.DITOLAK_BELUM_WAKTUNYA_MASUK -> "Belum waktunya absen masuk"
+            hasil == HasilAbsen.DITOLAK_BELUM_WAKTUNYA_PULANG -> "Belum waktunya absen pulang"
+            hasil == HasilAbsen.DITOLAK_SUDAH_ABSEN_LENGKAP -> "Sudah absen masuk & pulang hari ini"
+            else -> ""
+        }
+        val diagnostik = when (hasil) {
+            HasilAbsen.DITOLAK_BELUM_WAKTUNYA_MASUK -> "Jam masuk ${jadwal.jamMasuk.format(JAM_FMT)}"
+            HasilAbsen.DITOLAK_BELUM_WAKTUNYA_PULANG -> "Jam pulang ${jadwal.jamPulang.format(JAM_FMT)}"
             else -> ""
         }
         return HasilScan(
@@ -185,13 +273,18 @@ class KioskViewModel(
             nama = match.nama,
             kelas = match.kelas,
             nis = match.nis,
-            pesan = pesan
+            pesan = pesan,
+            diagnostik = diagnostik,
         )
     }
 
     companion object {
         private val JAM_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        private val SYNC_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM HH:mm")
         private const val THROTTLE_MS = 600L
         private const val TAMPIL_MS = 4000L
+        private const val RINGKASAN_REFRESH_MS = 15_000L
+        private const val SINKRON_BERKALA_MS = 90_000L
+        private const val PICU_SINKRON_MIN_MS = 10_000L
     }
 }

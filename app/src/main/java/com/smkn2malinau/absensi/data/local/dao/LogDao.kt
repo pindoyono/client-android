@@ -2,6 +2,7 @@ package com.smkn2malinau.absensi.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.Query
 import com.smkn2malinau.absensi.data.local.entity.DeviceAuditLog
 import com.smkn2malinau.absensi.data.local.entity.LivenessLog
 import com.smkn2malinau.absensi.data.local.entity.SyncEventLog
@@ -16,4 +17,11 @@ interface LogDao {
 
     @Insert
     suspend fun insertSyncEvent(log: SyncEventLog)
+
+    @Query("SELECT MAX(timestamp) FROM sync_event_log WHERE status = 'success'")
+    suspend fun syncSuksesTerakhir(): String?
+
+    /** Event sync paling akhir (sukses ATAU gagal) — untuk menampilkan error terakhir di Panel Admin. */
+    @Query("SELECT * FROM sync_event_log ORDER BY timestamp DESC, log_id DESC LIMIT 1")
+    suspend fun sinkronTerakhir(): SyncEventLog?
 }

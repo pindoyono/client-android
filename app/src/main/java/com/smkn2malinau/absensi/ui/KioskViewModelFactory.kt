@@ -36,9 +36,11 @@ class KioskViewModelFactory(context: Context) : ViewModelProvider.Factory {
         return KioskViewModel(
             faceEngine = faceEngine,
             attendanceLogic = AttendanceLogic(),
-            repo = AbsensiRepositoryImpl(db, deviceId),
+            repo = AbsensiRepositoryImpl(db, deviceId, credentialManager.getFaceKey()),
             onlineFlow = NetworkMonitor(appContext).onlineFlow,
             onSiteTestingSelesai = { credentialManager.isOnSiteTestingSelesai() },
+            ambangJarak = credentialManager.getAmbangJarak(),
+            picuSinkron = { com.smkn2malinau.absensi.sync.SyncWorker.enqueueSekali(appContext) },
             muatModel = { faceEngine.loadModels(LIVENESS_MODEL, EMBEDDING_MODEL) },
         ) as T
     }

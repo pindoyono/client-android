@@ -10,6 +10,23 @@ interface FaceEngine {
     suspend fun detectLiveness(bitmapBytes: ByteArray): LivenessResult?
 
     /**
+     * Jalur ENROLLMENT — ekstraksi embedding TANPA cek liveness.
+     * Setara `proses_frame(skip_liveness=True)` di client Windows: enrollment
+     * dilakukan diawasi admin, anti-spoofing tidak relevan dan hanya bikin gagal.
+     */
+    suspend fun prosesFrameEnroll(frameBytes: ByteArray): HasilDeteksiWajah {
+        val embedding = extractEmbedding(frameBytes)
+        return HasilDeteksiWajah(
+            wajahTerdeteksi = embedding != null,
+            lolosLiveness = true,
+            embedding = embedding,
+            livenessScore = 1f,
+            ambangLiveness = LivenessEvaluator.AMBANG_LIVENESS_DEFAULT,
+            alasanGagal = if (embedding == null) "embedding_gagal" else null,
+        )
+    }
+
+    /**
      * Jalur "satu frame → hasil" yang dipakai KioskViewModel (PRD bagian 4).
      * Menggabungkan deteksi liveness + ekstraksi embedding jadi satu hasil.
      */

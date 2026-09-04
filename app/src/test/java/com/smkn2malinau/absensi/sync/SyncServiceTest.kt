@@ -6,59 +6,67 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Base64
 
 /**
- * Test SyncService (PRD bagian 6) — skenario gagal-sebagian, push override,
- * dan embeddings/jadwal benar-benar mendarat di repo.
+ * Test SyncService — kontrak HARUS sama dengan server (`absensi-server-fase1`)
+ * dan `client-windows/app/sync/service.py`. Skenario: hasil per-record,
+ * embedding hex, jadwal per kelas, push override, gagal total.
  */
 class SyncServiceTest {
 
     @Test
-    fun `sync gagal-sebagian - diterima duplikat dan gagal ditandai berbeda`() = runTest {
-        val repo = FakeSyncRepo(
-            unsynced = listOf(
-                absensi("r1"), absensi("r2"), absensi("r3")
-            )
-        )
+    fun `hasil per-record dari server ditandai berbeda`() = runTest {
+        val repo = FakeSyncRepo(unsynced = listOf(absensi("r1"), absensi("r2"), absensi("r3")))
         val api = FakeApi(
             syncResponse = SyncAbsensiResponse(
-                status = "ok",
-                diterima = listOf("r1"),
-                duplikat = listOf("r2"),
-                gagal = listOf("r3")
+                total = 3, disimpan = 1, duplikat = 1, gagal = 1,
+                hasil = listOf(
+                    SyncResultItemDto("r1", "disimpan"),
+                    SyncResultItemDto("r2", "duplikat_diabaikan"),
+                    SyncResultItemDto("r3", "gagal", "constraint"),
+                )
             )
         )
-        val service = SyncService(repo, api, "device_01")
 
-        val result = service.runSyncCycle()
+        val result = SyncService(repo, api, "device_01").runSyncCycle()
 
         assertTrue(result is SyncResult.Success)
         assertEquals("ok", repo.updated["r1"]?.sync_status)
         assertEquals(1, repo.updated["r1"]?.synced)
         assertEquals("duplikat", repo.updated["r2"]?.sync_status)
+        assertEquals(1, repo.updated["r2"]?.synced)
         assertEquals("gagal", repo.updated["r3"]?.sync_status)
         assertEquals(0, repo.updated["r3"]?.synced)
     }
 
     @Test
-    fun `embedding base64 dari server disimpan ke embedding cache`() = runTest {
-        val raw = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+    fun `jam_aktual dikirim sebagai datetime penuh`() = runTest {
+        val repo = FakeSyncRepo(unsynced = listOf(absensi("r1")))
+        val api = FakeApi(syncResponse = SyncAbsensiResponse(hasil = listOf(SyncResultItemDto("r1", "disimpan"))))
+
+        SyncService(repo, api, "d").runSyncCycle()
+
+        assertEquals("2026-09-02T06:30:00", api.lastSyncRequest?.records?.first()?.jamAktual)
+    }
+
+    @Test
+    fun `embedding hex dari server disimpan ke embedding cache`() = runTest {
+        val raw = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 15, 16, -1)
         val repo = FakeSyncRepo()
         val api = FakeApi(
             embeddingResponse = EmbeddingSyncResponse(
-                siswaList = listOf(
+                jumlah = 1,
+                data = listOf(
                     SiswaEmbeddingDto(
                         siswaId = 7, nis = "23200", nama = "Budi", kelas = "XI-E",
-                        embeddingBase64 = Base64.getEncoder().encodeToString(raw),
-                        modelVersion = "v1", aktif = true
+                        aktif = true, embeddingHex = raw.joinToString("") { "%02x".format(it) },
+                        modelVersion = "v1"
                     )
                 )
             )
         )
-        val service = SyncService(repo, api, "device_01")
 
-        service.runSyncCycle()
+        SyncService(repo, api, "device_01").runSyncCycle()
 
         assertEquals(1, repo.embeddings.size)
         assertEquals(7, repo.embeddings[0].siswa_id)
@@ -70,11 +78,11 @@ class SyncServiceTest {
         val repo = FakeSyncRepo()
         val api = FakeApi(
             embeddingResponse = EmbeddingSyncResponse(
-                siswaList = listOf(
-                    SiswaEmbeddingDto(9, "1", "X", "Y", null, "v1", aktif = false)
-                )
+                jumlah = 1,
+                data = listOf(SiswaEmbeddingDto(9, "1", "X", "Y", aktif = false))
             )
         )
+
         SyncService(repo, api, "d").runSyncCycle()
 
         assertEquals(listOf(9), repo.deletedSiswa)
@@ -82,20 +90,43 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `jadwal efektif dari server disimpan ke jadwal cache`() = runTest {
-        val repo = FakeSyncRepo()
-        val api = FakeApi(
-            jadwalResponse = JadwalEfektifResponse(
-                jadwalList = listOf(
-                    JadwalDto("XI-E", "2026-09-02", "SELASA", "07:00", "14:00", "standar")
-                )
-            )
-        )
+    fun `jadwal efektif ditarik untuk jadwal umum dan tiap kelas`() = runTest {
+        val repo = FakeSyncRepo(kelas = listOf("XI-E"))
+        val api = FakeApi(jadwalResponse = JadwalEfektifDto("standar", "07:00:00", "14:00:00"))
+
         SyncService(repo, api, "d").runSyncCycle()
 
-        assertEquals(1, repo.jadwal.size)
-        assertEquals("XI-E", repo.jadwal[0].kelas)
-        assertEquals("07:00", repo.jadwal[0].jam_masuk)
+        // 1 panggilan untuk kelas null (umum → disimpan sbg "") + 1 untuk "XI-E"
+        assertEquals(listOf(null, "XI-E"), api.jadwalKelasDiminta)
+        assertEquals(setOf("", "XI-E"), repo.jadwal.map { it.kelas }.toSet())
+        assertEquals("07:00:00", repo.jadwal.first { it.kelas == "" }.jam_masuk)
+    }
+
+    @Test
+    fun `jadwal 404 satu kelas tidak menggagalkan siklus`() = runTest {
+        val repo = FakeSyncRepo(kelas = listOf("XI-E"))
+        val api = FakeApi(jadwalResponse = JadwalEfektifDto("tidak_ada_sekolah", null, null))
+
+        val result = SyncService(repo, api, "d").runSyncCycle()
+
+        assertTrue(result is SyncResult.Success)
+        assertTrue(repo.jadwal.isEmpty())
+    }
+
+    @Test
+    fun `dispensasi aktif ditarik dengan tanggal dan disimpan`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(
+            dispensasiResponse = listOf(
+                DispensasiDto(id = 1, siswaId = 7, tanggal = "2026-09-02", jenis = "PULANG_CEPAT", kategori = "SAKIT", alasan = "demam")
+            )
+        )
+
+        SyncService(repo, api, "d").runSyncCycle()
+
+        assertTrue(api.dispensasiTanggalDiminta?.isNotBlank() == true)
+        assertEquals(1, repo.dispensasi.size)
+        assertEquals("SAKIT", repo.dispensasi[0].kategori)
     }
 
     @Test
@@ -104,17 +135,32 @@ class SyncServiceTest {
             unsyncedOverrides = listOf(
                 JadwalOverrideLokal(
                     id = "o1", tanggal = "2026-09-02", kelas = "XI-E",
-                    jam_masuk = "08:00", jam_pulang = "12:00", alasan = "rapat",
+                    jam_masuk = "08:00:00", jam_pulang = "12:00:00", alasan = "rapat",
                     dibuat_pada = "2026-09-02T06:00:00"
                 )
             )
         )
-        val api = FakeApi(pushResponse = PushOverrideResponse(status = "ok", pesan = null))
+        val api = FakeApi(pushResponse = PushOverrideResponse(id = 5, sumber = "device", clientId = "o1"))
 
         SyncService(repo, api, "d").runSyncCycle()
 
+        assertEquals("o1", api.lastOverrideRequest?.clientId)
         assertEquals(1, repo.updatedOverride["o1"]?.terkirim)
         assertEquals("ok", repo.updatedOverride["o1"]?.status_push)
+    }
+
+    @Test
+    fun `roster dari server di-seed ke akun lokal`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(rosterResponse = RosterResponse(guru = listOf(
+            RosterItemDto("budi@s.sch.id", "Budi", "admin", true),
+            RosterItemDto("sri@s.sch.id", "Sri", "guru_piket", true),
+        )))
+
+        SyncService(repo, api, "d").runSyncCycle()
+
+        assertEquals(2, repo.rosterDiseed.size)
+        assertEquals("admin", repo.rosterDiseed.first { it.email == "budi@s.sch.id" }.role)
     }
 
     @Test
@@ -125,6 +171,7 @@ class SyncServiceTest {
         val result = SyncService(repo, api, "d").runSyncCycle()
 
         assertTrue(result is SyncResult.Failure)
+        assertEquals(1, repo.syncEvents.size)
         assertEquals("failed", repo.syncEvents.last().status)
     }
 
@@ -132,40 +179,64 @@ class SyncServiceTest {
 
     private fun absensi(id: String) = AbsensiLokal(
         record_id = id, siswa_id = 1, tanggal = "2026-09-02", type = "MASUK",
-        jam_aktual = "06:30", status_kehadiran_otomatis = "NORMAL", catatan = "",
+        jam_aktual = "06:30:00", status_kehadiran_otomatis = "NORMAL", catatan = "",
         device_id = "device_01", dibuat_pada = "2026-09-02T06:30:00"
     )
 
     private class FakeApi(
-        private val syncResponse: SyncAbsensiResponse = SyncAbsensiResponse("ok", emptyList(), emptyList(), emptyList()),
-        private val embeddingResponse: EmbeddingSyncResponse = EmbeddingSyncResponse(emptyList()),
-        private val jadwalResponse: JadwalEfektifResponse = JadwalEfektifResponse(emptyList()),
-        private val dispensasiResponse: DispensasiAktifResponse = DispensasiAktifResponse(emptyList()),
-        private val pushResponse: PushOverrideResponse = PushOverrideResponse("ok", null),
+        private val syncResponse: SyncAbsensiResponse = SyncAbsensiResponse(),
+        private val embeddingResponse: EmbeddingSyncResponse = EmbeddingSyncResponse(),
+        private val jadwalResponse: JadwalEfektifDto = JadwalEfektifDto(),
+        private val dispensasiResponse: List<DispensasiDto> = emptyList(),
+        private val pushResponse: PushOverrideResponse = PushOverrideResponse(),
+        private val rosterResponse: RosterResponse = RosterResponse(),
         private val throwOnEmbeddings: Boolean = false,
     ) : ApiService {
-        override suspend fun syncAbsensi(request: SyncAbsensiRequest) = syncResponse
-        override suspend fun getEmbeddings(): EmbeddingSyncResponse {
+        var lastSyncRequest: SyncAbsensiRequest? = null
+        var lastOverrideRequest: PushOverrideRequest? = null
+        val jadwalKelasDiminta = mutableListOf<String?>()
+        var dispensasiTanggalDiminta: String? = null
+
+        override suspend fun loginGoogle(request: GoogleLoginRequest) = error("n/a")
+        override suspend fun registerDevice(bearer: String, request: DeviceRegisterRequest) = error("n/a")
+        override suspend fun syncAbsensi(request: SyncAbsensiRequest): SyncAbsensiResponse {
+            lastSyncRequest = request
+            return syncResponse
+        }
+        override suspend fun getEmbeddings(diperbaruiSejak: String?): EmbeddingSyncResponse {
             if (throwOnEmbeddings) throw RuntimeException("boom")
             return embeddingResponse
         }
-        override suspend fun getJadwalEfektif() = jadwalResponse
-        override suspend fun getDispensasiAktif() = dispensasiResponse
-        override suspend fun pushOverride(request: PushOverrideRequest) = pushResponse
+        override suspend fun getJadwalEfektif(kelas: String?): JadwalEfektifDto {
+            jadwalKelasDiminta.add(kelas)
+            return jadwalResponse
+        }
+        override suspend fun getDispensasiAktif(tanggal: String): List<DispensasiDto> {
+            dispensasiTanggalDiminta = tanggal
+            return dispensasiResponse
+        }
+        override suspend fun pushOverride(request: PushOverrideRequest): PushOverrideResponse {
+            lastOverrideRequest = request
+            return pushResponse
+        }
         override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = HealthReportResponse("ok")
+        override suspend fun getRoster() = rosterResponse
     }
 
     private class FakeSyncRepo(
         private val unsynced: List<AbsensiLokal> = emptyList(),
         private val unsyncedOverrides: List<JadwalOverrideLokal> = emptyList(),
+        private val kelas: List<String> = emptyList(),
     ) : SyncRepository {
         val updated = mutableMapOf<String, AbsensiLokal>()
         val updatedOverride = mutableMapOf<String, JadwalOverrideLokal>()
         val embeddings = mutableListOf<EmbeddingCache>()
         val jadwal = mutableListOf<JadwalCache>()
+        val dispensasi = mutableListOf<DispensasiCache>()
         val deletedSiswa = mutableListOf<Int>()
         val deletedEmbedding = mutableListOf<Int>()
         val syncEvents = mutableListOf<SyncEventLog>()
+        var enrollLokalDibersihkan = 0
 
         override suspend fun getUnsyncedRecords() = unsynced
         override suspend fun updateAbsensi(absensi: AbsensiLokal) { updated[absensi.record_id] = absensi }
@@ -173,11 +244,16 @@ class SyncServiceTest {
         override suspend fun deleteSiswa(siswaId: Int) { deletedSiswa.add(siswaId) }
         override suspend fun insertEmbedding(embedding: EmbeddingCache) { embeddings.add(embedding) }
         override suspend fun deleteEmbedding(siswaId: Int) { deletedEmbedding.add(siswaId) }
-        override suspend fun insertDispensasi(dispensasi: DispensasiCache) {}
-        override suspend fun insertJadwal(jadwal: JadwalCache) { this.jadwal.add(jadwal) }
+        override suspend fun hapusEnrollLokalTertimpa() { enrollLokalDibersihkan++ }
+        override suspend fun insertDispensasi(dispensasi: DispensasiCache) { this.dispensasi.add(dispensasi) }
+        override suspend fun gantiJadwalCache(jadwal: List<JadwalCache>) { this.jadwal.clear(); this.jadwal.addAll(jadwal) }
+        override suspend fun daftarKelas() = kelas
         override suspend fun getUnsyncedOverrides() = unsyncedOverrides
         override suspend fun updateOverrideLokal(override: JadwalOverrideLokal) { updatedOverride[override.id] = override }
         override suspend fun insertSyncEvent(log: SyncEventLog) { syncEvents.add(log) }
         override suspend fun insertLiveness(log: LivenessLog) {}
+        val rosterDiseed = mutableListOf<com.smkn2malinau.absensi.data.remote.RosterItemDto>()
+        override suspend fun seedAkunRoster(guru: List<com.smkn2malinau.absensi.data.remote.RosterItemDto>) { rosterDiseed.addAll(guru) }
+        override suspend fun kesehatanCache() = KesehatanCache()
     }
 }

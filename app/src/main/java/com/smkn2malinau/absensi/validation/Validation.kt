@@ -11,6 +11,9 @@ object Validation {
     private val DEVICE_ID_REGEX = Regex("^[A-Za-z0-9_-]{4,64}$")
     private val API_KEY_REGEX = Regex("^[A-Za-z0-9_-]{16,128}$")
 
+    /** Fernet key: 32 byte base64url → 43 karakter + '=' padding (44 total). */
+    private val FERNET_KEY_REGEX = Regex("^[A-Za-z0-9_-]{43}=$")
+
     fun isValidNis(nis: String): Boolean = NIS_REGEX.matches(nis.trim())
 
     fun isValidNama(nama: String): Boolean = NAMA_REGEX.matches(nama.trim())
@@ -20,4 +23,6 @@ object Validation {
     fun isValidDeviceId(deviceId: String): Boolean = DEVICE_ID_REGEX.matches(deviceId.trim())
 
     fun isValidApiKey(apiKey: String): Boolean = API_KEY_REGEX.matches(apiKey.trim())
+
+    fun isValidFernetKey(key: String): Boolean = FERNET_KEY_REGEX.matches(key.trim())
 }

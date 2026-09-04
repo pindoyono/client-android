@@ -28,6 +28,45 @@ interface JadwalDao {
     @Query("SELECT * FROM jadwal_override_lokal WHERE terkirim = 0")
     suspend fun getAntrianSyncOverride(): List<JadwalOverrideLokal>
 
+    // --- Panel Admin: kelola jadwal ---
+
+    @Query("SELECT * FROM jadwal_override_lokal ORDER BY dibuat_pada DESC")
+    suspend fun getSemuaOverrideLokal(): List<JadwalOverrideLokal>
+
+    @Query("DELETE FROM jadwal_override_lokal WHERE id = :id")
+    suspend fun deleteOverrideLokal(id: String)
+
+    @Query("SELECT * FROM jadwal_cache ORDER BY kelas, tanggal")
+    suspend fun getSemuaJadwalCache(): List<JadwalCache>
+
+    @Query("SELECT COUNT(*) FROM jadwal_cache")
+    suspend fun countJadwalCache(): Int
+
+    /** Timestamp jadwal paling baru ditarik dari server (untuk badge kesegaran kiosk). */
+    @Query("SELECT MAX(ditarik_pada) FROM jadwal_cache")
+    suspend fun jadwalCacheTerbaru(): String?
+
+    /**
+     * Jadwal kelas mana pun untuk tanggal tertentu — untuk header kiosk saat idle
+     * (setara `jadwal_pertama_tersedia` di client Windows). Dibatasi ke tanggal
+     * yang diminta supaya baris hari lalu tidak ikut tampil. Utamakan override.
+     */
+    @Query("SELECT * FROM jadwal_cache WHERE tanggal = :tanggal ORDER BY (sumber = 'override') DESC, kelas LIMIT 1")
+    suspend fun getJadwalHariIni(tanggal: String): JadwalCache?
+
+    /** Ganti seluruh cache jadwal (setara `replace_jadwal_cache` di client Windows). */
+    @Query("DELETE FROM jadwal_cache")
+    suspend fun hapusSemuaJadwalCache()
+
+    @Query("SELECT COUNT(*) FROM dispensasi_cache")
+    suspend fun countDispensasiCache(): Int
+
+    @Query(
+        "UPDATE jadwal_override_lokal SET status_push = 'pending', terkirim = 0, pesan_push = NULL " +
+            "WHERE status_push = 'ditolak'"
+    )
+    suspend fun resetOverrideDitolak(): Int
+
     @Query("SELECT * FROM dispensasi_cache WHERE siswa_id = :siswaId AND tanggal = :tanggal AND jenis = :jenis")
     suspend fun getDispensasiAktif(siswaId: Int, tanggal: String, jenis: String): DispensasiCache?
 

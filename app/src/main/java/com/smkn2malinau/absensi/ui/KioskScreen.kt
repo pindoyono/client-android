@@ -1,37 +1,84 @@
 package com.smkn2malinau.absensi.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.smkn2malinau.absensi.ui.theme.AbsensiColors
+import com.smkn2malinau.absensi.ui.theme.PaletHasil
+import com.smkn2malinau.absensi.ui.theme.Spasi
 
 /**
  * State UI untuk layar kiosk.
  */
 data class KioskUiState(
-    val statusJaringan: StatusJaringan = StatusJaringan.ONLINE,
+    val statusJaringan: StatusJaringan = StatusJaringan.SINKRON_TERTUNDA,
     val jamSekarang: String = "14:32",
     val onSiteTestingSelesai: Boolean = false,
-    val kesegaranBermasalah: Boolean = false,
-    val hasilTerakhir: HasilScan? = null
+    val hasilTerakhir: HasilScan? = null,
+    /** Status bar sinkronisasi + jam masuk/pulang — setara header kiosk Windows. */
+    val ringkasanSync: RingkasanSyncUi? = null,
+    val jadwalMasuk: String? = null,
+    val jadwalPulang: String? = null,
+    val kesegaran: KesegaranUi = KesegaranUi.TIDAK_DIKETAHUI,
+    val dataBasi: List<String> = emptyList(),
 )
 
-enum class StatusJaringan { ONLINE, OFFLINE }
+/** Baris "Sync: 04/09 00:19 · 0 antre, 128 wajah, 11 jadwal". */
+data class RingkasanSyncUi(
+    val waktuTeks: String,
+    val antreKirim: Int,
+    val jumlahWajah: Int,
+    val jumlahJadwal: Int,
+)
+
+enum class KesegaranUi { SEGAR, BASI, TIDAK_DIKETAHUI }
+
+/**
+ * Status pil kiri-atas. Ditentukan gabungan jaringan + hasil siklus sync terakhir
+ * (bukan cuma konektivitas) — sesuai perilaku kiosk Windows yang cek `/health`
+ * di awal tiap siklus.
+ */
+enum class StatusJaringan {
+    /** Jaringan ada DAN siklus sync terakhir sukses. */
+    ONLINE,
+    /** Jaringan ada tapi siklus sync terakhir gagal / belum pernah jalan. */
+    SINKRON_TERTUNDA,
+    /** Tidak ada jaringan — absensi disimpan lokal. */
+    OFFLINE,
+}
 
 data class HasilScan(
     val status: StatusHasil,
     val nama: String = "",
     val kelas: String = "",
     val nis: String = "",
-    val pesan: String = ""
+    val pesan: String = "",
+    /** Baris kecil di bawah — diagnostik (mis. jarak match), tidak menggantikan judul. */
+    val diagnostik: String = "",
 )
 
 enum class StatusHasil {
@@ -47,158 +94,293 @@ enum class StatusHasil {
 @Composable
 fun KioskScreen(
     state: KioskUiState,
+    kameraSiap: Boolean = true,
+    onOpenAdmin: () -> Unit = {},
     cameraContent: @Composable () -> Unit = {}
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AbsensiColors.Bg)
-    ) {
-        HeaderBar(status = state.statusJaringan, jam = state.jamSekarang)
-        if (!state.onSiteTestingSelesai) ModeTestingBanner()
-        if (state.kesegaranBermasalah) KesegaranDataBadge(state)
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.Center
-        ) {
-            cameraContent()
-            HasilScanCard(state.hasilTerakhir)
-        }
-        FooterHint()
-    }
-}
+    Box(modifier = Modifier.fillMaxSize().background(AbsensiColors.Bg)) {
+        cameraContent()
 
-@Composable
-private fun HeaderBar(status: StatusJaringan, jam: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AbsensiColors.Surface)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val (dotColor, text) = when (status) {
-            StatusJaringan.ONLINE -> Pair(AbsensiColors.SuksesTeks, "Online · tersinkron")
-            StatusJaringan.OFFLINE -> Pair(AbsensiColors.NetralTeks, "Offline · disimpan lokal")
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Scrim supaya teks tetap terbaca di atas preview kamera.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to AbsensiColors.Bg.copy(alpha = if (kameraSiap) 0.72f else 1f),
+                        0.35f to AbsensiColors.Bg.copy(alpha = if (kameraSiap) 0.30f else 1f),
+                        0.7f to AbsensiColors.Bg.copy(alpha = if (kameraSiap) 0.45f else 1f),
+                        1f to AbsensiColors.Bg.copy(alpha = if (kameraSiap) 0.85f else 1f),
+                    )
+                )
+        )
+
+        Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+            BarisAtas(state, onOpenAdmin)
+
             Box(
                 modifier = Modifier
-                    .size(8.dp)
-                    .background(dotColor)
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(Spasi.lg),
+                contentAlignment = Alignment.Center
+            ) {
+                Crossfade(
+                    targetState = state.hasilTerakhir,
+                    animationSpec = tween(220),
+                    label = "hasil-scan"
+                ) { hasil ->
+                    if (hasil == null) KartuIdle(kameraSiap) else KartuHasil(hasil)
+                }
+            }
+
+            Text(
+                text = "Arahkan wajah untuk absen berikutnya",
+                color = AbsensiColors.InkMuted,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Spasi.lg, start = Spasi.lg, end = Spasi.lg)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(text, color = AbsensiColors.InkSoft, fontSize = 16.sp)
         }
-        Text(jam, color = AbsensiColors.Ink, fontSize = 20.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-private fun ModeTestingBanner() {
-    Box(
+private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AbsensiColors.WarningBg)
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = Spasi.lg, vertical = Spasi.md),
+        verticalArrangement = Arrangement.spacedBy(Spasi.sm)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PilStatusJaringan(state.statusJaringan)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spasi.sm)
+            ) {
+                Text(
+                    text = state.jamSekarang,
+                    color = AbsensiColors.Ink,
+                    style = MaterialTheme.typography.displaySmall
+                )
+                IconButton(onClick = onOpenAdmin) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Buka menu admin",
+                        tint = AbsensiColors.InkSoft
+                    )
+                }
+            }
+        }
+
+        state.ringkasanSync?.let { r ->
+            Text(
+                text = "Sync: ${r.waktuTeks} · ${r.antreKirim} antre, ${r.jumlahWajah} wajah, ${r.jumlahJadwal} jadwal",
+                color = AbsensiColors.InkMuted,
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spasi.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ChipJadwal(state.jadwalMasuk, state.jadwalPulang)
+            when (state.kesegaran) {
+                KesegaranUi.SEGAR ->
+                    ChipInfo("✓ Data segar", AbsensiColors.SuksesTeks, AbsensiColors.SuksesBg)
+                KesegaranUi.BASI ->
+                    ChipInfo(
+                        "⚠ ${state.dataBasi.joinToString(" & ").ifEmpty { "Data" }} basi",
+                        AbsensiColors.WarningTeks, AbsensiColors.WarningBg
+                    )
+                KesegaranUi.TIDAK_DIKETAHUI -> Unit
+            }
+        }
+
+        if (!state.onSiteTestingSelesai) {
+            Row {
+                ChipInfo("MODE TESTING · TIDAK DISIMPAN", AbsensiColors.WarningTeks, AbsensiColors.WarningBg)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChipJadwal(masuk: String?, pulang: String?) {
+    Surface(
+        color = AbsensiColors.Surface2,
+        contentColor = AbsensiColors.Ink,
+        shape = MaterialTheme.shapes.small,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border)
     ) {
         Text(
-            "MODE TESTING",
-            color = AbsensiColors.WarningTeks,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
+            text = "Masuk: ${masuk ?: "--:--"}   Pulang: ${pulang ?: "--:--"}",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = Spasi.md, vertical = 6.dp)
         )
     }
 }
 
 @Composable
-private fun KesegaranDataBadge(state: KioskUiState) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AbsensiColors.WarningBg)
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
+private fun PilStatusJaringan(status: StatusJaringan) {
+    val (warna, teks) = when (status) {
+        StatusJaringan.ONLINE -> AbsensiColors.SuksesTeks to "Online · tersinkron"
+        StatusJaringan.SINKRON_TERTUNDA -> AbsensiColors.WarningTeks to "Online · belum tersinkron"
+        StatusJaringan.OFFLINE -> AbsensiColors.NetralTeks to "Offline · disimpan lokal"
+    }
+    val warnaAnim by animateColorAsState(warna, tween(300), label = "dot")
+    Surface(
+        color = AbsensiColors.Surface.copy(alpha = 0.7f),
+        contentColor = AbsensiColors.InkSoft,
+        shape = MaterialTheme.shapes.small,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border)
     ) {
+        Row(
+            modifier = Modifier.padding(horizontal = Spasi.md, vertical = Spasi.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spasi.sm)
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(warnaAnim))
+            Text(teks, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun ChipInfo(teks: String, aksen: Color, latar: Color) {
+    Surface(color = latar, contentColor = aksen, shape = MaterialTheme.shapes.small) {
         Text(
-            "Data mulai basi — sinkron segera",
-            color = AbsensiColors.WarningTeks,
-            fontSize = 14.sp
+            teks,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = Spasi.md, vertical = 6.dp)
         )
     }
 }
 
 @Composable
-private fun HasilScanCard(hasil: HasilScan?) {
-    if (hasil == null) {
-        Text(
-            "Arahkan wajah ke kamera",
-            color = AbsensiColors.InkSoft,
-            fontSize = 24.sp,
-            textAlign = TextAlign.Center
-        )
-        return
-    }
-
-    val (bgColor, textColor, label) = when (hasil.status) {
-        StatusHasil.BERHASIL_TEPAT_WAKTU -> Triple(AbsensiColors.SuksesBg, AbsensiColors.SuksesTeks, "Tepat waktu")
-        StatusHasil.BERHASIL_TERLAMBAT -> Triple(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Terlambat")
-        StatusHasil.BERHASIL_PULANG_DISPENSASI -> Triple(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Pulang dengan izin")
-        StatusHasil.DITOLAK_SUDAH_ABSEN -> Triple(AbsensiColors.BahayaBg, AbsensiColors.BahayaTeks, "Ditolak")
-        StatusHasil.DITOLAK_BELUM_WAKTUNYA -> Triple(AbsensiColors.WarningBg, AbsensiColors.WarningTeks, "Belum waktunya")
-        StatusHasil.WAJAH_TIDAK_DIKENALI -> Triple(AbsensiColors.NetralBg, AbsensiColors.NetralTeks, "Tidak dikenali")
-        StatusHasil.OFFLINE -> Triple(AbsensiColors.NetralBg, AbsensiColors.NetralTeks, "Offline")
-    }
-
+private fun KartuIdle(kameraSiap: Boolean) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(24.dp)
+        verticalArrangement = Arrangement.spacedBy(Spasi.lg)
     ) {
         Box(
             modifier = Modifier
-                .size(160.dp)
-                .background(AbsensiColors.Surface2),
+                .size(132.dp)
+                .clip(CircleShape)
+                .background(AbsensiColors.Surface.copy(alpha = 0.6f)),
             contentAlignment = Alignment.Center
         ) {
-            Text("📷", fontSize = 48.sp)
-        }
-        Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            hasil.pesan.ifEmpty { label },
-            color = textColor,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
-        if (hasil.nama.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(hasil.nama, color = AbsensiColors.Ink, fontSize = 24.sp, fontWeight = FontWeight.Medium)
-            Text(
-                "${hasil.kelas} · ${hasil.nis}",
-                color = AbsensiColors.InkSoft,
-                fontSize = 18.sp
+            Icon(
+                Icons.Default.Face,
+                contentDescription = null,
+                tint = AbsensiColors.InkSoft,
+                modifier = Modifier.size(64.dp)
             )
         }
+        Text(
+            if (kameraSiap) "Arahkan wajah ke kamera" else "Menunggu izin kamera…",
+            color = AbsensiColors.InkSoft,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
 @Composable
-private fun FooterHint() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AbsensiColors.Surface)
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
+private fun KartuHasil(hasil: HasilScan) {
+    val palet = paletUntuk(hasil.status)
+    val ikon = ikonUntuk(hasil.status)
+
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = AbsensiColors.Surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border),
+        modifier = Modifier.widthIn(max = 460.dp)
     ) {
-        Text(
-            "Arahkan wajah untuk berikutnya",
-            color = AbsensiColors.InkMuted,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spasi.md),
+            modifier = Modifier.padding(horizontal = Spasi.xl, vertical = Spasi.xl)
+        ) {
+            Box(
+                modifier = Modifier.size(104.dp).clip(CircleShape).background(palet.latar),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(ikon, contentDescription = null, tint = palet.aksen, modifier = Modifier.size(52.dp))
+            }
+
+            Text(palet.label.uppercase(), color = palet.aksen, style = MaterialTheme.typography.labelMedium)
+
+            Text(
+                hasil.pesan.ifEmpty { palet.label },
+                color = AbsensiColors.Ink,
+                style = MaterialTheme.typography.headlineMedium,
+                textAlign = TextAlign.Center
+            )
+
+            if (hasil.diagnostik.isNotEmpty()) {
+                Text(
+                    hasil.diagnostik,
+                    color = AbsensiColors.InkMuted,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            if (hasil.nama.isNotEmpty()) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(Spasi.xs)
+                ) {
+                    Box(
+                        Modifier
+                            .padding(top = Spasi.xs)
+                            .width(40.dp)
+                            .height(3.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .background(AbsensiColors.Border)
+                    )
+                    Text(hasil.nama, color = AbsensiColors.Ink, style = MaterialTheme.typography.titleLarge)
+                    val detail = listOf(hasil.kelas, hasil.nis).filter { it.isNotBlank() }.joinToString("  ·  ")
+                    if (detail.isNotEmpty()) {
+                        Text(detail, color = AbsensiColors.InkSoft, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
     }
+}
+
+private fun paletUntuk(status: StatusHasil): PaletHasil = when (status) {
+    StatusHasil.BERHASIL_TEPAT_WAKTU ->
+        PaletHasil(AbsensiColors.SuksesTeks, AbsensiColors.SuksesBg, "Tepat waktu")
+    StatusHasil.BERHASIL_TERLAMBAT ->
+        PaletHasil(AbsensiColors.WarningTeks, AbsensiColors.WarningBg, "Terlambat")
+    StatusHasil.BERHASIL_PULANG_DISPENSASI ->
+        PaletHasil(AbsensiColors.WarningTeks, AbsensiColors.WarningBg, "Pulang dengan izin")
+    StatusHasil.DITOLAK_SUDAH_ABSEN ->
+        PaletHasil(AbsensiColors.BahayaTeks, AbsensiColors.BahayaBg, "Sudah absen")
+    StatusHasil.DITOLAK_BELUM_WAKTUNYA ->
+        PaletHasil(AbsensiColors.WarningTeks, AbsensiColors.WarningBg, "Belum waktunya")
+    StatusHasil.WAJAH_TIDAK_DIKENALI ->
+        PaletHasil(AbsensiColors.NetralTeks, AbsensiColors.NetralBg, "Tidak dikenali")
+    StatusHasil.OFFLINE ->
+        PaletHasil(AbsensiColors.NetralTeks, AbsensiColors.NetralBg, "Offline")
+}
+
+private fun ikonUntuk(status: StatusHasil): ImageVector = when (status) {
+    StatusHasil.BERHASIL_TEPAT_WAKTU,
+    StatusHasil.BERHASIL_TERLAMBAT,
+    StatusHasil.BERHASIL_PULANG_DISPENSASI -> Icons.Default.CheckCircle
+    StatusHasil.DITOLAK_SUDAH_ABSEN -> Icons.Default.Info
+    StatusHasil.DITOLAK_BELUM_WAKTUNYA, StatusHasil.OFFLINE -> Icons.Default.Warning
+    StatusHasil.WAJAH_TIDAK_DIKENALI -> Icons.Default.Face
 }
