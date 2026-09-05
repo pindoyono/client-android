@@ -262,9 +262,12 @@ class CredentialManager(context: Context) {
     /**
      * Status geofencing terakhir — diperbarui SyncService tiap siklus sync
      * (best-effort, lihat SyncService step 7b), dibaca KioskViewModel untuk
-     * memblokir layar kiosk. Default true (belum pernah dicek / server belum
-     * mengatur lokasi device ini) supaya tidak memblokir kiosk yang belum
-     * di-setup geofencing-nya.
+     * memblokir layar kiosk. Fail-closed: default FALSE (belum pernah
+     * berhasil sync ke server sama sekali) — begitu sync pertama berhasil,
+     * nilai sungguhan dari server (termasuk kasus "lokasi belum diatur" =
+     * tetap false) yang menentukan. Kiosk offline lama tidak kena efek ini
+     * karena nilai TERAKHIR yang tersimpan dipakai terus, bukan direset ke
+     * default setiap kali — default hanya berlaku sebelum sync pertama.
      */
     fun setStatusLokasi(valid: Boolean, alasan: String, jarakMeter: Double? = null) {
         val editor = prefs.edit().putBoolean(PREF_LOKASI_VALID, valid).putString(PREF_LOKASI_ALASAN, alasan)
@@ -273,7 +276,7 @@ class CredentialManager(context: Context) {
         editor.apply()
     }
 
-    fun lokasiValid(): Boolean = prefs.getBoolean(PREF_LOKASI_VALID, true)
+    fun lokasiValid(): Boolean = prefs.getBoolean(PREF_LOKASI_VALID, false)
     fun lokasiAlasan(): String? = prefs.getString(PREF_LOKASI_ALASAN, null)
     /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur di server. */
     fun lokasiJarakMeter(): Double? =
