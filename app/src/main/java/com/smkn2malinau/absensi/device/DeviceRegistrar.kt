@@ -43,6 +43,18 @@ class DeviceRegistrar(private val api: ApiService) {
             return HasilRegistrasi.Gagal("Server tidak mengembalikan token")
         }
 
+        // Cek role SEBELUM memanggil registerDevice — server hanya menerima token
+        // "admin" untuk /device/register (bukan cuma guru/guru_piket, apalagi
+        // siswa yang kini juga bisa login Google). Tanpa guard ini, mencoba
+        // registrasi pakai akun non-admin gagal dengan HTTP 401/403 polos yang
+        // tidak menjelaskan sebabnya sama sekali.
+        if (login.role != "admin") {
+            return HasilRegistrasi.Gagal(
+                "Akun ini login sebagai '${login.role ?: "tidak diketahui"}', bukan admin. " +
+                    "Registrasi device kiosk cuma bisa pakai akun Google admin sekolah."
+            )
+        }
+
         val reg = try {
             api.registerDevice(
                 bearer = "Bearer ${login.accessToken}",
@@ -58,6 +70,10 @@ class DeviceRegistrar(private val api: ApiService) {
                     deviceId = deviceId ?: "",
                     nama = login.nama,
                     role = login.role,
+                )
+                401, 403 -> HasilRegistrasi.Gagal(
+                    "Server menolak akun ini untuk registrasi device (role '${login.role}'). " +
+                        "Pakai akun Google admin sekolah."
                 )
                 else -> HasilRegistrasi.Gagal("Registrasi device gagal (HTTP ${e.code()})")
             }

@@ -45,7 +45,7 @@ class DeviceRegistrarTest {
     @Test
     fun `api_key dibaca dari field apapun (api_key)`() = runTest {
         val api = FakeApi(
-            login = GoogleLoginResponse("jwt", null, null),
+            login = GoogleLoginResponse("jwt", null, "admin"),
             register = DeviceRegisterResponse(deviceId = "d1", apiKey = "via-api-key")
         )
         val hasil = DeviceRegistrar(api).registrasi(idTokenUntuk("a@guru.smk.belajar.id"), "d1", "X")
@@ -63,9 +63,30 @@ class DeviceRegistrarTest {
     }
 
     @Test
+    fun `login sukses tapi role siswa - ditolak sebelum panggil registerDevice`() = runTest {
+        val api = FakeApi(login = GoogleLoginResponse("jwt", "Budi", "siswa"))
+        val hasil = DeviceRegistrar(api).registrasi(
+            idTokenUntuk("budi@smkn2malinau.sch.id"), "android-xyz", "Gerbang"
+        )
+        assertTrue(hasil is HasilRegistrasi.Gagal)
+        assertTrue((hasil as HasilRegistrasi.Gagal).pesan.contains("siswa"))
+        assertEquals(0, api.registerCalls) // tidak sempat memanggil server sama sekali
+    }
+
+    @Test
+    fun `login sukses tapi role guru_piket - ditolak (bukan admin)`() = runTest {
+        val api = FakeApi(login = GoogleLoginResponse("jwt", "Bu Sri", "guru_piket"))
+        val hasil = DeviceRegistrar(api).registrasi(
+            idTokenUntuk("sri@smkn2malinau.sch.id"), "android-xyz", "Gerbang"
+        )
+        assertTrue(hasil is HasilRegistrasi.Gagal)
+        assertEquals(0, api.registerCalls)
+    }
+
+    @Test
     fun `device sudah terdaftar (409) - minta api key manual`() = runTest {
         val api = FakeApi(
-            login = GoogleLoginResponse("jwt", "Bu Sri", "guru_piket"),
+            login = GoogleLoginResponse("jwt", "Bu Sri", "admin"),
             registerError = httpError(409)
         )
         val hasil = DeviceRegistrar(api).registrasi(
@@ -87,7 +108,7 @@ class DeviceRegistrarTest {
     @Test
     fun `server tidak kembalikan api_key - gagal`() = runTest {
         val api = FakeApi(
-            login = GoogleLoginResponse("jwt", null, null),
+            login = GoogleLoginResponse("jwt", null, "admin"),
             register = DeviceRegisterResponse(deviceId = "d1")
         )
         val hasil = DeviceRegistrar(api).registrasi(idTokenUntuk("a@smkn2malinau.sch.id"), "d1", "X")
@@ -109,6 +130,7 @@ class DeviceRegistrarTest {
         private val registerError: HttpException? = null,
     ) : ApiService {
         var loginCalls = 0
+        var registerCalls = 0
         var bearerDipakai: String? = null
 
         override suspend fun loginGoogle(request: GoogleLoginRequest): GoogleLoginResponse {
@@ -118,6 +140,7 @@ class DeviceRegistrarTest {
         }
 
         override suspend fun registerDevice(bearer: String, request: DeviceRegisterRequest): DeviceRegisterResponse {
+            registerCalls++
             bearerDipakai = bearer
             registerError?.let { throw it }
             return register ?: error("register tidak di-set")
