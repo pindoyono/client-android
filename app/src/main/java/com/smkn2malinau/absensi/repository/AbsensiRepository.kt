@@ -5,6 +5,7 @@ import com.smkn2malinau.absensi.business.AttendanceLogic
 import com.smkn2malinau.absensi.business.HasilAbsen
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.AbsensiLokal
+import com.smkn2malinau.absensi.data.local.dao.RiwayatAbsenRow
 import com.smkn2malinau.absensi.data.local.entity.DispensasiCache
 import com.smkn2malinau.absensi.face.CryptoEmbedding
 import com.smkn2malinau.absensi.face.LivenessEvaluator
@@ -52,6 +53,9 @@ interface AbsensiRepository {
      * (`Sync: dd/MM HH:mm · N antre, N wajah, N jadwal`, badge kesegaran, jam masuk/pulang).
      */
     suspend fun ringkasanKiosk(tanggal: String = LocalDate.now().toString()): RingkasanKiosk
+
+    /** [limit] absensi terakhir (paling baru duluan) — daftar riwayat kiosk. */
+    suspend fun riwayatAbsenTerbaru(limit: Int = 5): List<RiwayatAbsenRow>
 }
 
 /** Data header kiosk (PRD observabilitas degradasi + PRD bagian 4.4). */
@@ -110,21 +114,39 @@ class AbsensiRepositoryImpl(
     private val jamFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
     private val jamPendekFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
+    /**
+     * Cache embedding yang sudah didekripsi (kunci = siswa_id), supaya frame kiosk berikutnya
+     * tidak mendekripsi ulang seluruh `embedding_cache` (Fernet: AES-CBC + HMAC per baris) —
+     * biaya itu O(n) per scan dan makin berat seiring jumlah siswa terenroll. Entry dianggap
+     * valid selama ciphertext-nya (`encrypted`) masih sama dengan baris di DB; kalau beda
+     * (re-enroll/sync baru) baris itu saja yang didekripsi ulang, sisanya tetap dari cache.
+     */
+    private class EmbeddingTercache(val encrypted: ByteArray, val vektor: FloatArray)
+    @Volatile private var cacheEmbedding: Map<Int, EmbeddingTercache> = emptyMap()
+
     override suspend fun cariSiswaCocok(embedding: FloatArray, ambangJarak: Float): SiswaCocok {
         if (embedding.isEmpty()) return SiswaCocok(ditemukan = false)
 
         val siswaById = db.siswaDao().getSemuaSiswa().associateBy { it.siswa_id }
+        val cacheLama = cacheEmbedding
+        val cacheBaru = HashMap<Int, EmbeddingTercache>(cacheLama.size)
         var terbaik: SiswaCocok = SiswaCocok(ditemukan = false)
         var gagalDekripsi = 0
         var dibandingkan = 0
 
         for (row in db.siswaDao().getSemuaEmbedding()) {
-            val kandidat = try {
-                CryptoEmbedding.decryptEmbedding(row.embedding_encrypted, faceKey)
-            } catch (e: Exception) {
-                gagalDekripsi++
-                continue
+            val darCache = cacheLama[row.siswa_id]?.takeIf { it.encrypted.contentEquals(row.embedding_encrypted) }
+            val kandidat = if (darCache != null) {
+                darCache.vektor
+            } else {
+                try {
+                    CryptoEmbedding.decryptEmbedding(row.embedding_encrypted, faceKey)
+                } catch (e: Exception) {
+                    gagalDekripsi++
+                    continue
+                }
             }
+            cacheBaru[row.siswa_id] = EmbeddingTercache(row.embedding_encrypted, kandidat)
             if (kandidat.size != embedding.size) continue
             dibandingkan++
 
@@ -141,6 +163,7 @@ class AbsensiRepositoryImpl(
                 )
             }
         }
+        cacheEmbedding = cacheBaru
         if (gagalDekripsi > 0) {
             Log.w(
                 "AbsensiRepository",
@@ -235,6 +258,8 @@ class AbsensiRepositoryImpl(
             kesegaran = hitungKesegaran(),
         )
     }
+
+    override suspend fun riwayatAbsenTerbaru(limit: Int): List<RiwayatAbsenRow> = db.absensiDao().riwayatAbsenTerbaru(limit)
 
     /** Jadwal umum hari ini; bila tak ada, jadwal kelas mana pun untuk HARI INI. */
     private suspend fun jadwalHeaderHariIni(tanggal: String): AttendanceLogic.JadwalEfektif? {

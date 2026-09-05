@@ -38,6 +38,9 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
     private var livenessSession: OrtSession? = null
     private var embeddingSession: OrtSession? = null
     private val appContext = context.applicationContext
+    @Volatile private var statusAkselerasi: String = "belum dimuat"
+
+    override fun statusAkselerasi(): String = statusAkselerasi
 
     private val faceDetector: FaceDetector by lazy {
         FaceDetection.getClient(
@@ -52,13 +55,12 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
         withContext(Dispatchers.IO) {
             try {
                 env = OrtEnvironment.getEnvironment()
-                val options = OrtSession.SessionOptions()
 
                 val livenessFile = copyAssetToCache(livenessModelPath)
-                livenessSession = env?.createSession(livenessFile.absolutePath, options)
+                livenessSession = env?.createSession(livenessFile.absolutePath, buatSessionOptions())
 
                 val embeddingFile = copyAssetToCache(embeddingModelPath)
-                embeddingSession = env?.createSession(embeddingFile.absolutePath, options)
+                embeddingSession = env?.createSession(embeddingFile.absolutePath, buatSessionOptions())
 
                 Log.d("MiniFasNetEngine", "Models loaded successfully")
             } catch (e: Exception) {
@@ -66,6 +68,22 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
                 throw e
             }
         }
+    }
+
+    /**
+     * NNAPI execution provider bila didukung device (percepat inference dibanding CPU murni) —
+     * gagal aktifkan (device/emulator tak dukung) tetap lanjut jalan di CPU, bukan fatal.
+     */
+    private fun buatSessionOptions(): OrtSession.SessionOptions {
+        val options = OrtSession.SessionOptions()
+        try {
+            options.addNnapi()
+            statusAkselerasi = "NNAPI"
+        } catch (e: Exception) {
+            Log.w("MiniFasNetEngine", "NNAPI tidak tersedia, pakai CPU: ${e.message}")
+            statusAkselerasi = "CPU (NNAPI tidak didukung)"
+        }
+        return options
     }
 
     // --- Jalur gabungan (deteksi wajah SEKALI, dipakai liveness + embedding) ---

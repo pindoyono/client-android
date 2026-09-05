@@ -9,6 +9,9 @@ interface FaceEngine {
     suspend fun extractEmbedding(bitmapBytes: ByteArray): FloatArray?
     suspend fun detectLiveness(bitmapBytes: ByteArray): LivenessResult?
 
+    /** Akselerasi inference yang sedang aktif (mis. "NNAPI" / "CPU") — untuk layar benchmark. */
+    fun statusAkselerasi(): String = "CPU"
+
     /**
      * Jalur ENROLLMENT — ekstraksi embedding TANPA cek liveness.
      * Setara `proses_frame(skip_liveness=True)` di client Windows: enrollment
