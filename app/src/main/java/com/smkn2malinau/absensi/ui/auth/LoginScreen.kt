@@ -41,14 +41,14 @@ fun LoginScreen(
             shape = MaterialTheme.shapes.large,
             color = AbsensiColors.Surface,
             border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border),
-            modifier = Modifier.widthIn(max = 400.dp).padding(Spasi.lg),
+            modifier = Modifier.widthIn(max = 380.dp).padding(Spasi.lg),
         ) {
             Column(
-                Modifier.padding(Spasi.xl),
+                Modifier.padding(Spasi.lg),
                 verticalArrangement = Arrangement.spacedBy(Spasi.md),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(Icons.Default.Lock, null, tint = AbsensiColors.InkSoft, modifier = Modifier.size(36.dp))
+                Icon(Icons.Default.Lock, null, tint = AbsensiColors.InkSoft, modifier = Modifier.size(28.dp))
                 Text(
                     if (state.butuhBuatPassword) "Buat Password Offline" else "Login Panel Admin",
                     style = MaterialTheme.typography.titleLarge,
@@ -56,8 +56,7 @@ fun LoginScreen(
 
                 if (state.belumAdaAkun && !state.butuhBuatPassword) {
                     Text(
-                        "Belum ada akun di device ini. Role ditentukan server — " +
-                            "login Google (online) dulu minimal sekali.",
+                        "Belum ada akun di perangkat ini. Login Google sekali dulu untuk menetapkan role.",
                         style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkMuted,
                     )
                 }
@@ -82,6 +81,31 @@ fun LoginScreen(
     }
 }
 
+/** Tombol aksi utama — tinggi & lebar seragam, label selalu 1 baris. */
+@Composable
+private fun TombolUtama(teks: String, aktif: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        enabled = aktif,
+        modifier = Modifier.fillMaxWidth().height(48.dp),
+    ) { Text(teks, maxLines = 1) }
+}
+
+/** Pemisah "atau" tipis antara jalur online dan offline. */
+@Composable
+private fun PemisahAtau() {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = Spasi.xs)) {
+        HorizontalDivider(Modifier.weight(1f), color = AbsensiColors.Border)
+        Text(
+            "atau",
+            style = MaterialTheme.typography.labelSmall,
+            color = AbsensiColors.InkMuted,
+            modifier = Modifier.padding(horizontal = Spasi.sm),
+        )
+        HorizontalDivider(Modifier.weight(1f), color = AbsensiColors.Border)
+    }
+}
+
 @Composable
 private fun ColumnScope.LoginForm(
     state: LoginUiState,
@@ -90,24 +114,16 @@ private fun ColumnScope.LoginForm(
     onSukses: (SesiPengguna) -> Unit,
 ) {
     if (state.googleTersedia) {
-        Button(
-            onClick = { vm.loginGoogle(context, onSukses) },
-            enabled = !state.sibuk,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-        ) { Text("Login dengan Google (online)") }
+        TombolUtama("Login dengan Google", !state.sibuk) { vm.loginGoogle(context, onSukses) }
         Text(
-            "Butuh internet. Role ditentukan server. Untuk offline pakai email + password di bawah.",
+            "Perlu internet · role ditentukan server",
             style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkMuted,
         )
-        HorizontalDivider(Modifier.padding(vertical = Spasi.xs), color = AbsensiColors.Border)
+        PemisahAtau()
     }
 
     KolomIdentitasPassword(state, vm)
-    Button(
-        onClick = { vm.loginPassword(onSukses) },
-        enabled = !state.sibuk,
-        modifier = Modifier.fillMaxWidth().height(48.dp),
-    ) { Text("Login offline (email/NIS + password)") }
+    TombolUtama("Login offline", !state.sibuk) { vm.loginPassword(onSukses) }
 }
 
 @Composable
@@ -123,11 +139,7 @@ private fun ColumnScope.BuatPasswordForm(state: LoginUiState, vm: LoginViewModel
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         modifier = Modifier.fillMaxWidth(),
     )
-    Button(
-        onClick = { vm.buatPassword(onSukses) },
-        enabled = !state.sibuk,
-        modifier = Modifier.fillMaxWidth().height(48.dp),
-    ) { Text("Simpan & masuk") }
+    TombolUtama("Simpan & masuk", !state.sibuk) { vm.buatPassword(onSukses) }
 }
 
 @Composable
