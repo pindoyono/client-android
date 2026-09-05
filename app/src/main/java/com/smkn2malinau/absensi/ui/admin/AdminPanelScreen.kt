@@ -44,6 +44,7 @@ private enum class Seksi(val label: String, val ikon: ImageVector, val fitur: Fi
     ENROLLMENT("Daftar Wajah", Icons.Default.Face, Fitur.DAFTAR_WAJAH),
     AKUN("Akun", Icons.Default.Lock, Fitur.KELOLA_AKUN),
     PERANGKAT("Perangkat", Icons.Default.Settings, Fitur.PENGATURAN),
+    BENCHMARK("Benchmark", Icons.Default.PlayArrow, Fitur.BENCHMARK),
     PENGATURAN("Pengaturan", Icons.Default.Build, Fitur.PENGATURAN),
     WEB("Dashboard Web", Icons.Default.Info, Fitur.PANEL_ADMIN),
 }
@@ -144,6 +145,7 @@ fun AdminPanelScreen(
                     Seksi.AKUN -> AkunPane()
                     Seksi.ENROLLMENT -> Unit // ditangani di atas (layar penuh)
                     Seksi.PERANGKAT -> AdminScreen(onSaveSuccess = { viewModel.refresh() }, onOpenEnrollment = { seksi = Seksi.ENROLLMENT })
+                    Seksi.BENCHMARK -> BenchmarkPane()
                     Seksi.PENGATURAN -> PengaturanPane(
                         state, viewModel::simpanServerUrl, viewModel::setLensaDepan,
                         viewModel::simpanFaceKey, viewModel::tesFaceKey, viewModel::simpanAmbangJarak,

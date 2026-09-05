@@ -25,6 +25,7 @@ enum class Fitur {
     PENGATURAN,         // server URL, face key, ambang, hapus kredensial
     KELOLA_AKUN,        // tambah/hapus akun & set password
     RIWAYAT_SENDIRI,    // layar riwayat absensi siswa
+    BENCHMARK,          // uji performa device (deteksi/liveness/matching wajah)
 }
 
 /** Peta hak akses — sumber kebenaran tunggal untuk gating UI. */
