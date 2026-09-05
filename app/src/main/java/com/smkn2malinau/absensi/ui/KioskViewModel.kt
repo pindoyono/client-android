@@ -52,6 +52,9 @@ class KioskViewModel(
     private val lokasiAlasanProvider: () -> String? = { null },
     private val lokasiJarakProvider: () -> Double? = { null },
     private val lokasiDikonfigurasiProvider: () -> Boolean = { false },
+    /** true kalau cek geofencing terakhir mendeteksi lokasi mock (fake GPS) —
+     *  distempel ke record absensi supaya server bisa menandainya. */
+    private val lokasiMockProvider: () -> Boolean = { false },
     /** Sync manual dari tombol header kiosk (paksa=true, beda dari picuSinkron yang di-debounce). */
     private val paksaSinkron: () -> Unit = {},
     /** Observasi WorkInfo WORK_SEKALI supaya tombol sync manual punya umpan balik nyata (spinner). */
@@ -282,7 +285,7 @@ class KioskViewModel(
             }
             // GERBANG UJI LAPANGAN (PRD bagian 10): mode testing => JANGAN simpan ke DB.
             if (onSiteTestingSelesai()) {
-                tersimpan = repo.simpanAbsensi(match.siswaId, hasil, statusOtomatis, dispensasi?.alasan)
+                tersimpan = repo.simpanAbsensi(match.siswaId, hasil, statusOtomatis, dispensasi?.alasan, lokasiMockProvider())
                 if (tersimpan) {
                     picuSinkronDebounce() // kirim ke server secepatnya
                     muatRiwayatAbsen()

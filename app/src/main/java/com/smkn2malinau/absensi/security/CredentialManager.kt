@@ -295,6 +295,16 @@ class CredentialManager(context: Context) {
         return prefs.getString(PREF_LOKASI_ALASAN, null)
     }
 
+    /**
+     * true kalau hasil cek geofencing TERAKHIR menandai lokasi device sebagai
+     * mock (fake GPS). Diturunkan dari teks `lokasiAlasan()` — baik jalur
+     * online (`cek_lokasi_device` server) maupun offline (`GeoOffline`)
+     * memakai frasa "mock location" yang sama. Dipakai KioskViewModel untuk
+     * menstempel record absensi (`AbsensiLokal.lokasi_mock`) sebelum sync.
+     */
+    fun lokasiMock(): Boolean =
+        lokasiAlasan()?.contains("mock location", ignoreCase = true) == true
+
     /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur di server. */
     fun lokasiJarakMeter(): Double? {
         migrasiLokasiFailClosedJikaPerlu()

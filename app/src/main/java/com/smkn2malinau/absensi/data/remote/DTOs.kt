@@ -15,7 +15,11 @@ data class AbsensiRecordDto(
     @SerializedName("jam_aktual") val jamAktual: String,
     @SerializedName("status_kehadiran_otomatis") val statusKehadiranOtomatis: String,
     @SerializedName("catatan") val catatan: String?,
-    @SerializedName("device_id") val deviceId: String
+    @SerializedName("device_id") val deviceId: String,
+    /** true = record dibuat saat status geofencing menandai lokasi mock (fake
+     *  GPS). Server menyimpan tanda ini (tidak menolak). Default false —
+     *  server versi lama mengabaikan field ini. */
+    @SerializedName("lokasi_mock") val lokasiMock: Boolean = false,
 )
 
 /**

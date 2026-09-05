@@ -228,7 +228,8 @@ class KioskViewModelTest {
         override suspend fun statusHariIni(siswaId: Int, tanggal: String): AttendanceLogic.StatusAbsensi = status
         override suspend fun dispensasiAktif(siswaId: Int, tanggal: String): DispensasiCache? = dispensasi
         override suspend fun simpanAbsensi(
-            siswaId: Int, hasil: HasilAbsen, statusKehadiranOtomatis: String, catatan: String?
+            siswaId: Int, hasil: HasilAbsen, statusKehadiranOtomatis: String, catatan: String?,
+            lokasiMock: Boolean,
         ): Boolean {
             disimpan.add(Disimpan(siswaId, hasil, statusKehadiranOtomatis, catatan))
             return simpanBerhasil

@@ -43,6 +43,20 @@ class SyncServiceTest {
     }
 
     @Test
+    fun `flag lokasi_mock record lokal ikut terkirim di DTO sync`() = runTest {
+        val repo = FakeSyncRepo(unsynced = listOf(absensi("r1").copy(lokasi_mock = 1), absensi("r2")))
+        val api = FakeApi(syncResponse = SyncAbsensiResponse(hasil = listOf(
+            SyncResultItemDto("r1", "disimpan"), SyncResultItemDto("r2", "disimpan"),
+        )))
+
+        SyncService(repo, api, "d").runSyncCycle()
+
+        val dtoById = api.lastSyncRequest!!.records.associateBy { it.recordId }
+        assertEquals(true, dtoById["r1"]?.lokasiMock)
+        assertEquals(false, dtoById["r2"]?.lokasiMock)
+    }
+
+    @Test
     fun `jam_aktual dikirim sebagai datetime penuh`() = runTest {
         val repo = FakeSyncRepo(unsynced = listOf(absensi("r1")))
         val api = FakeApi(syncResponse = SyncAbsensiResponse(hasil = listOf(SyncResultItemDto("r1", "disimpan"))))
@@ -261,6 +275,29 @@ class SyncServiceTest {
             locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4295, lng = 116.4396, mock = true)),
             simpanStatusLokasi = { valid, alasan, _, _ -> validTersimpan = valid; alasanTersimpan = alasan },
             ambilKonfigLokasi = { KonfigLokasi(-3.4295, 116.4396, 100) },
+        ).runSyncCycle()
+
+        assertEquals(false, validTersimpan)
+        assertTrue(alasanTersimpan!!.contains("palsu"))
+    }
+
+    @Test
+    fun `cek lokasi online bilang valid tapi GPS palsu - client tetap menolak (fail-closed)`() = runTest {
+        val repo = FakeSyncRepo()
+        // Server (versi lama) mengabaikan flag mock & membalas valid.
+        val api = FakeApi(lokasiCekResponse = LokasiCekResponse(
+            valid = true, alasan = "dalam radius", jarakMeter = 5.0, dikonfigurasi = true,
+        ))
+        var validTersimpan: Boolean? = null
+        var alasanTersimpan: String? = null
+
+        SyncService(
+            repo, api, "d",
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4295, lng = 116.4396, mock = true)),
+            simpanStatusLokasi = { valid, alasan, _, dikonfigurasi ->
+                validTersimpan = valid; alasanTersimpan = alasan
+                assertTrue(dikonfigurasi)
+            },
         ).runSyncCycle()
 
         assertEquals(false, validTersimpan)

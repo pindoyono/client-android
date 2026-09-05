@@ -45,7 +45,10 @@ interface AbsensiRepository {
         siswaId: Int,
         hasil: HasilAbsen,
         statusKehadiranOtomatis: String,
-        catatan: String?
+        catatan: String?,
+        /** true = status geofencing terakhir menandai lokasi mock (fake GPS)
+         *  saat record ini dibuat. Disimpan & dikirim ke server apa adanya. */
+        lokasiMock: Boolean = false,
     ): Boolean
 
     /**
@@ -212,7 +215,8 @@ class AbsensiRepositoryImpl(
         siswaId: Int,
         hasil: HasilAbsen,
         statusKehadiranOtomatis: String,
-        catatan: String?
+        catatan: String?,
+        lokasiMock: Boolean,
     ): Boolean {
         val type = when (hasil) {
             HasilAbsen.BERHASIL_MASUK_NORMAL, HasilAbsen.BERHASIL_MASUK_TERLAMBAT -> "MASUK"
@@ -229,6 +233,7 @@ class AbsensiRepositoryImpl(
             status_kehadiran_otomatis = statusKehadiranOtomatis,
             catatan = catatan ?: "",
             device_id = deviceId,
+            lokasi_mock = if (lokasiMock) 1 else 0,
             dibuat_pada = now.toString()
         )
         return try {

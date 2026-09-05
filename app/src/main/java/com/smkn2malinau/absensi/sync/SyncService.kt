@@ -91,7 +91,8 @@ class SyncService(
                         jamAktual = gabungJamAktual(it.tanggal, it.jam_aktual),
                         statusKehadiranOtomatis = it.status_kehadiran_otomatis,
                         catatan = it.catatan.ifBlank { null },
-                        deviceId = it.device_id
+                        deviceId = it.device_id,
+                        lokasiMock = it.lokasi_mock == 1,
                     )
                 }
                 val response = api.syncAbsensi(SyncAbsensiRequest(dtoList))
@@ -303,7 +304,15 @@ class SyncService(
                     null
                 }
 
-                if (hasilOnline != null) {
+                if (lokasi.mock) {
+                    // GPS palsu terdeteksi OS — fail-closed di sisi client, apa pun
+                    // kata server. Server versi lama mungkin belum memeriksa flag
+                    // `mock` di request, jadi jangan pernah menganggap valid kalau
+                    // lokasinya ditandai mock (samakan dengan GeoOffline.validasi).
+                    val dikonfigurasi = hasilOnline?.dikonfigurasi
+                        ?: (konfigTerbaru?.let { it.lat != null && it.lng != null && it.radiusMeter != null } ?: false)
+                    simpanStatusLokasi(false, "GPS palsu (mock location) terdeteksi", null, dikonfigurasi)
+                } else if (hasilOnline != null) {
                     simpanStatusLokasi(hasilOnline.valid, hasilOnline.alasan, hasilOnline.jarakMeter, hasilOnline.dikonfigurasi)
                 } else {
                     // Server tak terjangkau (device offline, atau server lama tak

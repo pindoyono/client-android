@@ -17,6 +17,15 @@ data class AbsensiLokal(
     val status_kehadiran_otomatis: String,
     val catatan: String,
     val device_id: String,
+    /**
+     * 1 = saat record ini dibuat, status geofencing terakhir menandai lokasi
+     * device berasal dari mock-location (fake GPS). Dikirim ke server apa
+     * adanya (`lokasi_mock`) — server TIDAK menolak, hanya menandai untuk
+     * ditinjau guru piket. null = record lama / status tak diketahui.
+     * Catatan: kiosk sudah fail-closed saat mock terdeteksi, jadi ini hanya
+     * menangkap celah sebelum cek berkala berikutnya menutup akses.
+     */
+    val lokasi_mock: Int? = null,
     val synced: Int = 0,
     val sync_status: String = "pending",
     val percobaan_sync: Int = 0,

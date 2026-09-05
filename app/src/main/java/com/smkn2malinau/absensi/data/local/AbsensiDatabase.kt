@@ -24,7 +24,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         SyncEventLog::class,
         AkunLokal::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AbsensiDatabase : RoomDatabase() {
@@ -53,6 +53,15 @@ abstract class AbsensiDatabase : RoomDatabase() {
             }
         }
 
+        /** v2 → v3: kolom `lokasi_mock` di `absensi_lokal` — tandai record dari
+         *  lokasi mock (fake GPS). Nullable, TANPA DEFAULT SQL supaya cocok
+         *  dengan skema yang Room generate (val lokasi_mock: Int? = null). */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `absensi_lokal` ADD COLUMN `lokasi_mock` INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context, passphrase: ByteArray? = null): AbsensiDatabase {
             return INSTANCE ?: synchronized(this) {
                 val builder = Room.databaseBuilder(
@@ -66,7 +75,7 @@ abstract class AbsensiDatabase : RoomDatabase() {
                     builder.openHelperFactory(SupportOpenHelperFactory(passphrase))
                 }
 
-                builder.addMigrations(MIGRATION_1_2)
+                builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3)
 
                 val instance = builder.build()
                 INSTANCE = instance
