@@ -11,6 +11,9 @@ import com.smkn2malinau.absensi.data.local.dao.RiwayatAbsenRow
 import com.smkn2malinau.absensi.repository.AbsensiRepository
 import com.smkn2malinau.absensi.repository.RingkasanKiosk
 import com.smkn2malinau.absensi.repository.SiswaCocok
+import com.smkn2malinau.absensi.sync.SyncWorker
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -48,6 +51,10 @@ class KioskViewModel(
     private val lokasiValidProvider: () -> Boolean = { true },
     private val lokasiAlasanProvider: () -> String? = { null },
     private val lokasiJarakProvider: () -> Double? = { null },
+    /** Sync manual dari tombol header kiosk (paksa=true, beda dari picuSinkron yang di-debounce). */
+    private val paksaSinkron: () -> Unit = {},
+    /** Observasi WorkInfo WORK_SEKALI supaya tombol sync manual punya umpan balik nyata (spinner). */
+    private val workManager: WorkManager? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -105,19 +112,23 @@ class KioskViewModel(
         // Status bar sinkronisasi (jam masuk/pulang, badge kesegaran, ringkasan sync).
         viewModelScope.launch {
             while (isActive) {
-                runCatching { repo.ringkasanKiosk(tanggalProvider().toString()) }
-                    .onFailure { Log.w("KioskViewModel", "Gagal memuat ringkasan kiosk", it) }
-                    .getOrNull()
-                    ?.let { r -> _uiState.update { it.terapkanRingkasan(r) } }
-                // Geofencing — baca status cek terakhir (ditulis SyncService secara berkala).
-                _uiState.update {
-                    it.copy(
-                        lokasiValid = lokasiValidProvider(),
-                        lokasiAlasan = lokasiAlasanProvider(),
-                        lokasiJarakMeter = lokasiJarakProvider(),
-                    )
-                }
+                muatRingkasanDanLokasi()
                 delay(RINGKASAN_REFRESH_MS)
+            }
+        }
+        // Tombol sync manual di header kiosk — pantau WorkInfo WORK_SEKALI supaya
+        // tombol benar-benar terlihat bekerja (spinner selagi jalan, ringkasan
+        // langsung dimuat ulang begitu selesai) alih-alih diam tanpa umpan balik.
+        workManager?.let { wm ->
+            viewModelScope.launch {
+                wm.getWorkInfosForUniqueWorkFlow(SyncWorker.WORK_SEKALI).collect { infos ->
+                    val sebelumnya = _uiState.value.sedangSync
+                    val berjalan = infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+                    _uiState.update { it.copy(sedangSync = berjalan) }
+                    // Baru saja selesai (transisi jalan -> tidak jalan) -> muat ulang segera,
+                    // jangan tunggu tick RINGKASAN_REFRESH_MS berikutnya (bisa sampai 15 detik).
+                    if (sebelumnya && !berjalan) muatRingkasanDanLokasi()
+                }
             }
         }
         // Daftar 5 absensi terakhir (nama + masuk/pulang + keterangan dispensasi) — kartu riwayat kiosk.
@@ -174,6 +185,24 @@ class KioskViewModel(
 
     fun refreshModeTesting() {
         _uiState.update { it.copy(onSiteTestingSelesai = onSiteTestingSelesai()) }
+    }
+
+    /** Tombol sync manual di header kiosk — hasilnya lihat observer WorkInfo di init. */
+    fun syncSekarang() = paksaSinkron()
+
+    private suspend fun muatRingkasanDanLokasi() {
+        runCatching { repo.ringkasanKiosk(tanggalProvider().toString()) }
+            .onFailure { Log.w("KioskViewModel", "Gagal memuat ringkasan kiosk", it) }
+            .getOrNull()
+            ?.let { r -> _uiState.update { it.terapkanRingkasan(r) } }
+        // Geofencing — baca status cek terakhir (ditulis SyncService secara berkala).
+        _uiState.update {
+            it.copy(
+                lokasiValid = lokasiValidProvider(),
+                lokasiAlasan = lokasiAlasanProvider(),
+                lokasiJarakMeter = lokasiJarakProvider(),
+            )
+        }
     }
 
     /** Dipanggil oleh CameraView untuk tiap frame hasil ImageAnalysis. */

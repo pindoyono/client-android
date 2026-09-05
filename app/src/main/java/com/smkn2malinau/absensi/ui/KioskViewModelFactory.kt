@@ -8,7 +8,9 @@ import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.face.MiniFasNetEngine
 import com.smkn2malinau.absensi.repository.AbsensiRepositoryImpl
 import com.smkn2malinau.absensi.security.CredentialManager
+import com.smkn2malinau.absensi.sync.SyncWorker
 import com.smkn2malinau.absensi.util.NetworkMonitor
+import androidx.work.WorkManager
 
 /**
  * Wiring manual (tanpa DI framework) untuk KioskViewModel.
@@ -40,11 +42,13 @@ class KioskViewModelFactory(context: Context) : ViewModelProvider.Factory {
             onlineFlow = NetworkMonitor(appContext).onlineFlow,
             onSiteTestingSelesai = { credentialManager.isOnSiteTestingSelesai() },
             ambangJarak = credentialManager.getAmbangJarak(),
-            picuSinkron = { com.smkn2malinau.absensi.sync.SyncWorker.enqueueSekali(appContext) },
+            picuSinkron = { SyncWorker.enqueueSekali(appContext) },
             muatModel = { faceEngine.loadModels(LIVENESS_MODEL, EMBEDDING_MODEL) },
             lokasiValidProvider = { credentialManager.lokasiValid() },
             lokasiAlasanProvider = { credentialManager.lokasiAlasan() },
             lokasiJarakProvider = { credentialManager.lokasiJarakMeter() },
+            paksaSinkron = { SyncWorker.enqueueSekali(appContext, paksa = true) },
+            workManager = WorkManager.getInstance(appContext),
         ) as T
     }
 }

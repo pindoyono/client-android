@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +55,8 @@ data class KioskUiState(
     val lokasiAlasan: String? = null,
     /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur. */
     val lokasiJarakMeter: Double? = null,
+    /** Sync manual dari header sedang berjalan — dipakai tombol sync untuk spinner. */
+    val sedangSync: Boolean = false,
 )
 
 /** Baris "Sync: 04/09 00:19 · 0 antre, 128 wajah, 11 jadwal". */
@@ -187,13 +190,17 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekara
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 PilStatusJaringan(state.statusJaringan)
-                IconButton(onClick = onSyncSekarang, modifier = Modifier.size(28.dp)) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Sync sekarang",
-                        tint = AbsensiColors.InkSoft,
-                        modifier = Modifier.size(16.dp),
-                    )
+                IconButton(onClick = onSyncSekarang, enabled = !state.sedangSync, modifier = Modifier.size(28.dp)) {
+                    if (state.sedangSync) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AbsensiColors.InkSoft)
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Sync sekarang",
+                            tint = AbsensiColors.InkSoft,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
             Row(

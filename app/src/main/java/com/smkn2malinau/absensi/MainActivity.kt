@@ -121,7 +121,7 @@ private fun KioskRoot(onOpenAdmin: () -> Unit) {
         state = state,
         kameraSiap = hasCameraPermission,
         onOpenAdmin = onOpenAdmin,
-        onSyncSekarang = { SyncWorker.enqueueSekali(context, paksa = true) }
+        onSyncSekarang = viewModel::syncSekarang
     ) {
         if (hasCameraPermission) {
             CameraView(
