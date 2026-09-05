@@ -187,7 +187,7 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
                 Text(
                     text = state.jamSekarang,
                     color = AbsensiColors.Ink,
-                    style = MaterialTheme.typography.displaySmall
+                    style = MaterialTheme.typography.titleLarge
                 )
                 IconButton(onClick = onOpenAdmin) {
                     Icon(
@@ -263,12 +263,12 @@ private fun PilStatusJaringan(status: StatusJaringan) {
         border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = Spasi.md, vertical = Spasi.sm),
+            modifier = Modifier.padding(horizontal = Spasi.sm, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spasi.sm)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(warnaAnim))
-            Text(teks, style = MaterialTheme.typography.labelLarge)
+            Box(Modifier.size(6.dp).clip(CircleShape).background(warnaAnim))
+            Text(teks, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
