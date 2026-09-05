@@ -131,8 +131,11 @@ class AuthRepository(
         val id = identitas.trim().lowercase()
         if (id.isBlank()) return "Identitas (email / NIS) wajib diisi."
         if (role != Role.SISWA && !id.contains('@')) return "Email guru/admin harus mengandung '@'."
-        if (password != null && password.length < 6) return "Password minimal 6 karakter."
-        val h = password?.let { PasswordHasher.hash(it) }
+        val passwordEksplisit = password?.takeIf { it.isNotBlank() }
+        if (passwordEksplisit != null && passwordEksplisit.length < 6) return "Password minimal 6 karakter."
+        // Siswa tanpa password eksplisit: default ke NIS sendiri (siswa ganti sendiri setelah login pertama).
+        val passwordEfektif = passwordEksplisit ?: id.takeIf { role == Role.SISWA }
+        val h = passwordEfektif?.let { PasswordHasher.hash(it) }
         akunDao.upsert(
             AkunLokal(
                 identitas = id, nama = nama.ifBlank { id }, role = role.kode,
@@ -141,6 +144,16 @@ class AuthRepository(
             )
         )
         return null
+    }
+
+    /** Ganti password akun sendiri (verifikasi password lama dulu) — dipakai layar riwayat siswa. */
+    suspend fun ubahPasswordSendiri(identitas: String, passwordLama: String, passwordBaru: String): String? {
+        val id = identitas.trim().lowercase()
+        val akun = akunDao.getByIdentitas(id) ?: return "Akun tidak ditemukan."
+        if (!PasswordHasher.verifikasi(passwordLama, akun.password_hash, akun.salt)) {
+            return "Password lama salah."
+        }
+        return setPassword(id, passwordBaru)
     }
 
     suspend fun setPassword(identitas: String, passwordBaru: String): String? {

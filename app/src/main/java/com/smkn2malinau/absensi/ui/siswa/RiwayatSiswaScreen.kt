@@ -3,15 +3,20 @@ package com.smkn2malinau.absensi.ui.siswa
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smkn2malinau.absensi.auth.SesiPengguna
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.AbsensiLokal
@@ -28,6 +33,9 @@ fun RiwayatSiswaScreen(sesi: SesiPengguna?, onTutup: () -> Unit) {
     val context = LocalContext.current
     val siswaId = sesi?.siswaId
     var records by remember { mutableStateOf<List<AbsensiLokal>?>(null) }
+    val gantiPasswordVm: GantiPasswordViewModel =
+        viewModel(factory = GantiPasswordViewModel.Factory(context))
+    val gantiPasswordState by gantiPasswordVm.uiState.collectAsState()
 
     LaunchedEffect(siswaId) {
         records = if (siswaId == null) emptyList() else withContext(Dispatchers.IO) {
@@ -37,6 +45,10 @@ fun RiwayatSiswaScreen(sesi: SesiPengguna?, onTutup: () -> Unit) {
         }
     }
 
+    if (gantiPasswordState.terbuka && sesi != null) {
+        DialogGantiPassword(sesi.identitas, gantiPasswordState, gantiPasswordVm)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -44,6 +56,11 @@ fun RiwayatSiswaScreen(sesi: SesiPengguna?, onTutup: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = onTutup) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Tutup")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = gantiPasswordVm::buka) {
+                        Icon(Icons.Default.Lock, contentDescription = "Ubah Password")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -103,4 +120,54 @@ private fun BarisRiwayat(r: AbsensiLokal) {
             )
         }
     }
+}
+
+@Composable
+private fun DialogGantiPassword(
+    identitas: String,
+    state: GantiPasswordUiState,
+    vm: GantiPasswordViewModel,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!state.sibuk) vm.tutup() },
+        title = { Text("Ubah Password") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spasi.sm)) {
+                OutlinedTextField(
+                    state.passwordLama, vm::onPasswordLama, label = { Text("Password lama") },
+                    singleLine = true, enabled = !state.sibuk,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    state.passwordBaru, vm::onPasswordBaru, label = { Text("Password baru (min. 6)") },
+                    singleLine = true, enabled = !state.sibuk,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    state.passwordKonfirmasi, vm::onPasswordKonfirmasi, label = { Text("Ulangi password baru") },
+                    singleLine = true, enabled = !state.sibuk,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                state.pesan?.let {
+                    Text(
+                        it,
+                        color = if (state.pesanError) MaterialTheme.colorScheme.error else AbsensiColors.InkSoft,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { vm.simpan(identitas) {} }, enabled = !state.sibuk) { Text("Simpan") }
+        },
+        dismissButton = {
+            TextButton(onClick = vm::tutup, enabled = !state.sibuk) { Text("Batal") }
+        },
+    )
 }

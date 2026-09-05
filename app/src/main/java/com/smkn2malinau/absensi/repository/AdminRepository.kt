@@ -1,5 +1,6 @@
 package com.smkn2malinau.absensi.repository
 
+import com.smkn2malinau.absensi.auth.seedAkunSiswaDariRoster
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.AbsensiLokal
 import com.smkn2malinau.absensi.data.local.entity.JadwalCache
@@ -131,6 +132,7 @@ class AdminRepositoryImpl(private val db: AbsensiDatabase) : AdminRepository {
         siswaDao.insertSiswa(
             roster.map { SiswaCache(siswa_id = it.id, nis = it.nis, nama = it.nama, kelas = it.kelas) }
         )
+        db.akunDao().seedAkunSiswaDariRoster(roster)
 
         // Buang baris versi-server (id > 0) yang tak lagi ada di roster DAN belum
         // pernah enroll (tak punya embedding). Yang ber-embedding diurus

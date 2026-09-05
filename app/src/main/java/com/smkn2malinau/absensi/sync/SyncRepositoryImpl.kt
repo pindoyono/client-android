@@ -1,5 +1,6 @@
 package com.smkn2malinau.absensi.sync
 
+import com.smkn2malinau.absensi.auth.seedAkunSiswaDariRoster
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.RosterItemDto
@@ -58,6 +59,7 @@ class SyncRepositoryImpl(private val db: AbsensiDatabase) : SyncRepository {
         if (siswa.isEmpty()) return
         val siswaDao = db.siswaDao()
         siswaDao.insertSiswa(siswa.map { SiswaCache(siswa_id = it.id, nis = it.nis, nama = it.nama, kelas = it.kelas) })
+        db.akunDao().seedAkunSiswaDariRoster(siswa)
         // Buang baris versi-server (id > 0) yang tak lagi ada di roster DAN belum
         // pernah enroll (tak punya embedding). Yang ber-embedding diurus
         // /embeddings/sync lewat flag aktif=false — jangan disentuh di sini.

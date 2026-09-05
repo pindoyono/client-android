@@ -58,7 +58,13 @@ fun AkunPane(vm: AkunViewModel = viewModel(factory = AkunViewModel.Factory(Local
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    state.password, vm::onPassword, label = { Text("Password (opsional — bisa di-set nanti)") },
+                    state.password, vm::onPassword,
+                    label = {
+                        Text(
+                            if (state.role == Role.SISWA) "Password (kosongkan = default NIS)"
+                            else "Password (opsional — bisa di-set nanti)"
+                        )
+                    },
                     singleLine = true, visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
