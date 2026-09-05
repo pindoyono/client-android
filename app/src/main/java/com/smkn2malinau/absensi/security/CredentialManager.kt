@@ -32,6 +32,7 @@ class CredentialManager(context: Context) {
     private val PREF_LOKASI_ALASAN = "lokasi_alasan_terakhir"
     private val PREF_LOKASI_JARAK = "lokasi_jarak_meter_terakhir"
     private val PREF_LOKASI_DIKONFIGURASI = "lokasi_dikonfigurasi"
+    private val PREF_LOKASI_MIGRASI_FAILCLOSED = "lokasi_migrasi_failclosed_v1"
     private val PREF_NAMA_LOKASI = "nama_lokasi"
     private val PREF_ADMIN_NAMA = "admin_nama"
     private val PREF_ADMIN_ROLE = "admin_role"
@@ -266,9 +267,10 @@ class CredentialManager(context: Context) {
      * memblokir layar kiosk. Fail-closed: default FALSE (belum pernah
      * berhasil sync ke server sama sekali) — begitu sync pertama berhasil,
      * nilai sungguhan dari server (termasuk kasus "lokasi belum diatur" =
-     * tetap false) yang menentukan. Kiosk offline lama tidak kena efek ini
-     * karena nilai TERAKHIR yang tersimpan dipakai terus, bukan direset ke
-     * default setiap kali — default hanya berlaku sebelum sync pertama.
+     * tetap false) yang menentukan. Kiosk offline (tidak bisa konek server)
+     * tetap pakai nilai TERAKHIR yang tersimpan, bukan balik ke default —
+     * lihat migrasiLokasiFailClosedJikaPerlu() untuk kasus device yang
+     * pernah sync semasa geofencing masih opt-in (SEBELUM fail-closed).
      */
     fun setStatusLokasi(valid: Boolean, alasan: String, jarakMeter: Double? = null, dikonfigurasi: Boolean = false) {
         val editor = prefs.edit()
@@ -280,13 +282,50 @@ class CredentialManager(context: Context) {
         editor.apply()
     }
 
-    fun lokasiValid(): Boolean = prefs.getBoolean(PREF_LOKASI_VALID, false)
-    fun lokasiAlasan(): String? = prefs.getString(PREF_LOKASI_ALASAN, null)
+    fun lokasiValid(): Boolean {
+        migrasiLokasiFailClosedJikaPerlu()
+        return prefs.getBoolean(PREF_LOKASI_VALID, false)
+    }
+
+    fun lokasiAlasan(): String? {
+        migrasiLokasiFailClosedJikaPerlu()
+        return prefs.getString(PREF_LOKASI_ALASAN, null)
+    }
+
     /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur di server. */
-    fun lokasiJarakMeter(): Double? =
-        if (prefs.contains(PREF_LOKASI_JARAK)) prefs.getFloat(PREF_LOKASI_JARAK, 0f).toDouble() else null
+    fun lokasiJarakMeter(): Double? {
+        migrasiLokasiFailClosedJikaPerlu()
+        return if (prefs.contains(PREF_LOKASI_JARAK)) prefs.getFloat(PREF_LOKASI_JARAK, 0f).toDouble() else null
+    }
+
     /** Admin sudah pasang titik acuan untuk device ini atau belum — untuk indikator ikon kiosk. */
-    fun lokasiDikonfigurasi(): Boolean = prefs.getBoolean(PREF_LOKASI_DIKONFIGURASI, false)
+    fun lokasiDikonfigurasi(): Boolean {
+        migrasiLokasiFailClosedJikaPerlu()
+        return prefs.getBoolean(PREF_LOKASI_DIKONFIGURASI, false)
+    }
+
+    /**
+     * Migrasi sekali: sebelum geofencing dibuat fail-closed, "lokasi belum
+     * diatur" dianggap VALID (opt-in) dan tersimpan sebagai `true` di device
+     * yang sudah pernah sync. Mengganti nilai DEFAULT di kode (getBoolean(...,
+     * false)) TIDAK otomatis mengubah nilai yang SUDAH tersimpan — default
+     * hanya dipakai kalau key belum pernah di-set sama sekali. Akibatnya
+     * device yang pernah sync semasa opt-in tetap membaca `true` lama itu
+     * selamanya (bug nyata: indikator sudah menunjukkan "belum diatur", tapi
+     * kiosk tidak pernah terblokir) — sampai reset paksa satu kali ini.
+     * Setelah direset, kiosk fail-closed sampai sync berikutnya mengonfirmasi
+     * status sungguhan dari server (sama seperti device baru).
+     */
+    private fun migrasiLokasiFailClosedJikaPerlu() {
+        if (prefs.getBoolean(PREF_LOKASI_MIGRASI_FAILCLOSED, false)) return
+        prefs.edit()
+            .remove(PREF_LOKASI_VALID)
+            .remove(PREF_LOKASI_ALASAN)
+            .remove(PREF_LOKASI_JARAK)
+            .remove(PREF_LOKASI_DIKONFIGURASI)
+            .putBoolean(PREF_LOKASI_MIGRASI_FAILCLOSED, true)
+            .apply()
+    }
 
     private fun generateDefaultPassphrase(): ByteArray {
         val pass = "absensi_smkn2_malinau_2024_secure_db"
