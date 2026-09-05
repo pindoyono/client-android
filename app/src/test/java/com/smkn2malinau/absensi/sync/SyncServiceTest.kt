@@ -2,6 +2,8 @@ package com.smkn2malinau.absensi.sync
 
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.*
+import com.smkn2malinau.absensi.location.HasilLokasi
+import com.smkn2malinau.absensi.location.LocationChecker
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -178,6 +180,39 @@ class SyncServiceTest {
     }
 
     @Test
+    fun `hasil cek lokasi disimpan lewat callback`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(lokasiCekResponse = LokasiCekResponse(valid = false, alasan = "di luar radius"))
+        var statusTersimpan: Pair<Boolean, String>? = null
+
+        SyncService(
+            repo, api, "d",
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4, lng = 116.4)),
+            simpanStatusLokasi = { valid, alasan -> statusTersimpan = valid to alasan },
+        ).runSyncCycle()
+
+        assertEquals(false to "di luar radius", statusTersimpan)
+        assertEquals(true, api.lastLokasiCekRequest?.tersedia)
+        assertEquals(-3.4, api.lastLokasiCekRequest?.lat)
+    }
+
+    @Test
+    fun `cek lokasi gagal - siklus tetap sukses, status lama tidak ditimpa`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(throwOnLokasiCek = true)
+        var dipanggil = false
+
+        val result = SyncService(
+            repo, api, "d",
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = false)),
+            simpanStatusLokasi = { _, _ -> dipanggil = true },
+        ).runSyncCycle()
+
+        assertTrue(result is SyncResult.Success)
+        assertTrue(!dipanggil) // best-effort: gagal panggil server -> callback tidak dipanggil sama sekali
+    }
+
+    @Test
     fun `sync gagal total - insertSyncEvent status failed dan SyncResult Failure`() = runTest {
         val repo = FakeSyncRepo()
         val api = FakeApi(throwOnEmbeddings = true)
@@ -206,6 +241,8 @@ class SyncServiceTest {
         private val rosterResponse: RosterResponse = RosterResponse(),
         private val siswaRosterResponse: List<SiswaRosterDto> = emptyList(),
         private val throwOnEmbeddings: Boolean = false,
+        private val lokasiCekResponse: LokasiCekResponse = LokasiCekResponse(valid = true, alasan = "lokasi belum diatur"),
+        private val throwOnLokasiCek: Boolean = false,
     ) : ApiService {
         var lastSyncRequest: SyncAbsensiRequest? = null
         var lastOverrideRequest: PushOverrideRequest? = null
@@ -237,6 +274,16 @@ class SyncServiceTest {
         override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = HealthReportResponse("ok")
         override suspend fun getRoster() = rosterResponse
         override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = siswaRosterResponse
+        var lastLokasiCekRequest: LokasiCekRequest? = null
+        override suspend fun cekLokasi(deviceId: String, request: LokasiCekRequest): LokasiCekResponse {
+            if (throwOnLokasiCek) throw RuntimeException("boom")
+            lastLokasiCekRequest = request
+            return lokasiCekResponse
+        }
+    }
+
+    private class FakeLocationChecker(private val hasil: HasilLokasi) : LocationChecker {
+        override suspend fun ambilLokasiSaatIni(): HasilLokasi = hasil
     }
 
     private class FakeSyncRepo(

@@ -45,6 +45,11 @@ data class KioskUiState(
     val jadwalPulang: String? = null,
     val kesegaran: KesegaranUi = KesegaranUi.TIDAK_DIKETAHUI,
     val dataBasi: List<String> = emptyList(),
+    /** Baris "Nama · Masuk/Pulang · keterangan" dari 5 absensi terakhir — daftar persisten di kiosk. */
+    val riwayatAbsen: List<String> = emptyList(),
+    /** Geofencing (opt-in per device) — false = kiosk diblokir total, lihat KartuLokasiTidakValid. */
+    val lokasiValid: Boolean = true,
+    val lokasiAlasan: String? = null,
 )
 
 /** Baris "Sync: 04/09 00:19 · 0 antre, 128 wajah, 11 jadwal". */
@@ -118,6 +123,16 @@ fun KioskScreen(
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             BarisAtas(state, onOpenAdmin)
 
+            if (!state.lokasiValid) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(Spasi.lg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    KartuLokasiTidakValid(state.lokasiAlasan)
+                }
+                return@Column
+            }
+
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -132,6 +147,10 @@ fun KioskScreen(
                 ) { hasil ->
                     if (hasil == null) KartuIdle(kameraSiap) else KartuHasil(hasil)
                 }
+            }
+
+            if (state.riwayatAbsen.isNotEmpty()) {
+                DaftarRiwayatAbsen(state.riwayatAbsen)
             }
 
             Text(
@@ -265,15 +284,85 @@ private fun ChipInfo(teks: String, aksen: Color, latar: Color) {
     }
 }
 
+/** Warna teks bergantian untuk daftar nama — tanpa latar, murni teks berwarna. */
+private val WarnaRiwayat = listOf(
+    Color(0xFF60A5FA), // biru
+    Color(0xFF4ADE80), // hijau
+    Color(0xFFFBBF24), // kuning
+    Color(0xFFF472B6), // pink
+    Color(0xFFA78BFA), // ungu
+)
+
+/** Daftar 5 absensi terakhir — nama + masuk/pulang + keterangan, warna-warni, tanpa background. Selalu tampil. */
+@Composable
+private fun DaftarRiwayatAbsen(baris: List<String>) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = Spasi.sm)
+    ) {
+        baris.take(5).forEachIndexed { i, teks ->
+            Text(
+                text = teks,
+                color = WarnaRiwayat[i % WarnaRiwayat.size],
+                style = MaterialTheme.typography.titleSmall,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/** Kiosk diblokir total — geofencing gagal (di luar radius / GPS palsu / lokasi tak tersedia). */
+@Composable
+private fun KartuLokasiTidakValid(alasan: String?) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = AbsensiColors.BahayaBg,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.BahayaTeks),
+        modifier = Modifier.widthIn(max = 400.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spasi.sm),
+            modifier = Modifier.padding(horizontal = Spasi.lg, vertical = Spasi.lg)
+        ) {
+            Box(
+                modifier = Modifier.size(64.dp).clip(CircleShape).background(AbsensiColors.BahayaBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = AbsensiColors.BahayaTeks, modifier = Modifier.size(36.dp))
+            }
+            Text(
+                "Lokasi Tidak Valid",
+                color = AbsensiColors.BahayaTeks,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                alasan ?: "Kiosk ini berada di luar lokasi yang diizinkan.",
+                color = AbsensiColors.Ink,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                "Absensi dinonaktifkan sampai lokasi terverifikasi kembali. Hubungi admin sekolah.",
+                color = AbsensiColors.InkSoft,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
 @Composable
 private fun KartuIdle(kameraSiap: Boolean) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spasi.lg)
+        verticalArrangement = Arrangement.spacedBy(Spasi.md)
     ) {
         Box(
             modifier = Modifier
-                .size(132.dp)
+                .size(88.dp)
                 .clip(CircleShape)
                 .background(AbsensiColors.Surface.copy(alpha = 0.6f)),
             contentAlignment = Alignment.Center
@@ -282,13 +371,13 @@ private fun KartuIdle(kameraSiap: Boolean) {
                 Icons.Default.Face,
                 contentDescription = null,
                 tint = AbsensiColors.InkSoft,
-                modifier = Modifier.size(64.dp)
+                modifier = Modifier.size(40.dp)
             )
         }
         Text(
             if (kameraSiap) "Arahkan wajah ke kamera" else "Menunggu izin kamera…",
             color = AbsensiColors.InkSoft,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center
         )
     }
@@ -303,26 +392,26 @@ private fun KartuHasil(hasil: HasilScan) {
         shape = MaterialTheme.shapes.large,
         color = AbsensiColors.Surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border),
-        modifier = Modifier.widthIn(max = 460.dp)
+        modifier = Modifier.widthIn(max = 400.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spasi.md),
-            modifier = Modifier.padding(horizontal = Spasi.xl, vertical = Spasi.xl)
+            verticalArrangement = Arrangement.spacedBy(Spasi.sm),
+            modifier = Modifier.padding(horizontal = Spasi.lg, vertical = Spasi.lg)
         ) {
             Box(
-                modifier = Modifier.size(104.dp).clip(CircleShape).background(palet.latar),
+                modifier = Modifier.size(64.dp).clip(CircleShape).background(palet.latar),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(ikon, contentDescription = null, tint = palet.aksen, modifier = Modifier.size(52.dp))
+                Icon(ikon, contentDescription = null, tint = palet.aksen, modifier = Modifier.size(32.dp))
             }
 
-            Text(palet.label.uppercase(), color = palet.aksen, style = MaterialTheme.typography.labelMedium)
+            Text(palet.label.uppercase(), color = palet.aksen, style = MaterialTheme.typography.labelSmall)
 
             Text(
                 hasil.pesan.ifEmpty { palet.label },
                 color = AbsensiColors.Ink,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleMedium,
                 textAlign = TextAlign.Center
             )
 
@@ -330,7 +419,7 @@ private fun KartuHasil(hasil: HasilScan) {
                 Text(
                     hasil.diagnostik,
                     color = AbsensiColors.InkMuted,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center
                 )
             }
@@ -338,20 +427,20 @@ private fun KartuHasil(hasil: HasilScan) {
             if (hasil.nama.isNotEmpty()) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(Spasi.xs)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Box(
                         Modifier
-                            .padding(top = Spasi.xs)
-                            .width(40.dp)
-                            .height(3.dp)
+                            .padding(top = 2.dp, bottom = 2.dp)
+                            .width(28.dp)
+                            .height(2.dp)
                             .clip(MaterialTheme.shapes.small)
                             .background(AbsensiColors.Border)
                     )
-                    Text(hasil.nama, color = AbsensiColors.Ink, style = MaterialTheme.typography.titleLarge)
+                    Text(hasil.nama, color = AbsensiColors.Ink, style = MaterialTheme.typography.titleSmall)
                     val detail = listOf(hasil.kelas, hasil.nis).filter { it.isNotBlank() }.joinToString("  ·  ")
                     if (detail.isNotEmpty()) {
-                        Text(detail, color = AbsensiColors.InkSoft, style = MaterialTheme.typography.bodyMedium)
+                        Text(detail, color = AbsensiColors.InkSoft, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }

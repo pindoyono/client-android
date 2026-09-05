@@ -13,6 +13,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.remote.ApiClientProvider
+import com.smkn2malinau.absensi.location.FusedLocationChecker
 import com.smkn2malinau.absensi.security.CredentialManager
 import java.util.concurrent.TimeUnit
 
@@ -36,7 +37,11 @@ class SyncWorker(
             val repo = SyncRepositoryImpl(db)
             val api = ApiClientProvider.create(deviceId, apiKey, credentialManager.getServerBaseUrl())
 
-            val syncService = SyncService(repo, api, deviceId)
+            val syncService = SyncService(
+                repo, api, deviceId,
+                locationChecker = FusedLocationChecker(applicationContext),
+                simpanStatusLokasi = { valid, alasan -> credentialManager.setStatusLokasi(valid, alasan) },
+            )
             val result = syncService.runSyncCycle()
 
             when (result) {

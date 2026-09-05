@@ -116,5 +116,6 @@ class AuthRepositoryTest {
         override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = error("n/a")
         override suspend fun getRoster() = error("n/a")
         override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = error("n/a")
+        override suspend fun cekLokasi(deviceId: String, request: LokasiCekRequest) = error("n/a")
     }
 }

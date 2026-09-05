@@ -28,6 +28,8 @@ class CredentialManager(context: Context) {
     private val PREF_API_KEY = "api_key_enc"
     private val PREF_DB_PASSPHRASE = "db_passphrase_enc"
     private val PREF_ON_SITE_TESTING = "ON_SITE_TESTING_SELESAI"
+    private val PREF_LOKASI_VALID = "lokasi_valid_terakhir"
+    private val PREF_LOKASI_ALASAN = "lokasi_alasan_terakhir"
     private val PREF_NAMA_LOKASI = "nama_lokasi"
     private val PREF_ADMIN_NAMA = "admin_nama"
     private val PREF_ADMIN_ROLE = "admin_role"
@@ -255,6 +257,20 @@ class CredentialManager(context: Context) {
     fun setOnSiteTestingSelesai(value: Boolean) {
         prefs.edit().putBoolean(PREF_ON_SITE_TESTING, value).apply()
     }
+
+    /**
+     * Status geofencing terakhir — diperbarui SyncService tiap siklus sync
+     * (best-effort, lihat SyncService step 7b), dibaca KioskViewModel untuk
+     * memblokir layar kiosk. Default true (belum pernah dicek / server belum
+     * mengatur lokasi device ini) supaya tidak memblokir kiosk yang belum
+     * di-setup geofencing-nya.
+     */
+    fun setStatusLokasi(valid: Boolean, alasan: String) {
+        prefs.edit().putBoolean(PREF_LOKASI_VALID, valid).putString(PREF_LOKASI_ALASAN, alasan).apply()
+    }
+
+    fun lokasiValid(): Boolean = prefs.getBoolean(PREF_LOKASI_VALID, true)
+    fun lokasiAlasan(): String? = prefs.getString(PREF_LOKASI_ALASAN, null)
 
     private fun generateDefaultPassphrase(): ByteArray {
         val pass = "absensi_smkn2_malinau_2024_secure_db"

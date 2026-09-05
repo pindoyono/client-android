@@ -121,6 +121,22 @@ data class HealthReportResponse(
     @SerializedName("server_time") val serverTime: String? = null,
 )
 
+// --- Geofencing — POST /device/{id}/lokasi/cek ---
+
+data class LokasiCekRequest(
+    @SerializedName("tersedia") val tersedia: Boolean,
+    @SerializedName("lat") val lat: Double? = null,
+    @SerializedName("lng") val lng: Double? = null,
+    @SerializedName("akurasi_meter") val akurasiMeter: Float? = null,
+    @SerializedName("mock") val mock: Boolean = false,
+)
+
+data class LokasiCekResponse(
+    @SerializedName("valid") val valid: Boolean,
+    @SerializedName("alasan") val alasan: String,
+    @SerializedName("jarak_meter") val jarakMeter: Double? = null,
+)
+
 // --- Roster akun (seed login offline) — GET /auth/roster ---
 
 data class RosterResponse(

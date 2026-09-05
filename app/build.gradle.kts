@@ -136,6 +136,9 @@ dependencies {
     // untuk crop wajah sebelum MiniFasNet/ArcFace (setara Haar cascade client Windows).
     implementation("com.google.mlkit:face-detection:16.1.7")
 
+    // Fused Location Provider — geofencing per device (lihat location/LocationChecker.kt)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
     // Android Keystore wrapper (PRD bagian 5)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 

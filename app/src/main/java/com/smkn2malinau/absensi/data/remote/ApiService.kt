@@ -53,4 +53,11 @@ interface ApiService {
         @Query("kelas") kelas: String? = null,
         @Query("enrolled") enrolled: Boolean? = null,
     ): List<SiswaRosterDto>
+
+    // 9. Cek geofencing — dipanggil berkala (bukan per-scan), lihat KioskViewModel.
+    @POST("device/{id}/lokasi/cek")
+    suspend fun cekLokasi(
+        @Path("id") deviceId: String,
+        @Body request: LokasiCekRequest,
+    ): LokasiCekResponse
 }

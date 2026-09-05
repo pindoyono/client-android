@@ -39,4 +39,21 @@ interface AbsensiDao {
 
     @Query("SELECT * FROM absensi_lokal WHERE siswa_id = :siswaId ORDER BY tanggal DESC, jam_aktual DESC LIMIT :limit")
     suspend fun recordSiswa(siswaId: Int, limit: Int): List<AbsensiLokal>
+
+    /** N absensi terakhir (kiosk) — nama + jenis (masuk/pulang) + keterangan (izin/sakit/dll). */
+    @Query(
+        "SELECT s.nama AS nama, a.type AS type, " +
+            "a.status_kehadiran_otomatis AS status_kehadiran_otomatis, a.catatan AS catatan " +
+            "FROM absensi_lokal a JOIN siswa_cache s ON s.siswa_id = a.siswa_id " +
+            "ORDER BY a.dibuat_pada DESC LIMIT :limit"
+    )
+    suspend fun riwayatAbsenTerbaru(limit: Int): List<RiwayatAbsenRow>
 }
+
+/** Satu baris riwayat absen terbaru — dipakai daftar 5 absensi terakhir di kiosk. */
+data class RiwayatAbsenRow(
+    val nama: String,
+    val type: String, // MASUK | PULANG
+    val status_kehadiran_otomatis: String,
+    val catatan: String,
+)

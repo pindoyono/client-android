@@ -239,5 +239,7 @@ class KioskViewModelTest {
             sinkronTerakhirSukses = sinkronSukses,
             pernahSinkron = true,
         )
+
+        override suspend fun riwayatAbsenTerbaru(limit: Int): List<com.smkn2malinau.absensi.data.local.dao.RiwayatAbsenRow> = emptyList()
     }
 }

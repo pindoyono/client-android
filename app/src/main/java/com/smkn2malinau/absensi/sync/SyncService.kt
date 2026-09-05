@@ -2,6 +2,7 @@ package com.smkn2malinau.absensi.sync
 
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.*
+import com.smkn2malinau.absensi.location.LocationChecker
 import retrofit2.HttpException
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -55,7 +56,11 @@ data class KesehatanCache(
 class SyncService(
     private val repo: SyncRepository,
     private val api: ApiService,
-    private val deviceId: String
+    private val deviceId: String,
+    /** Geofencing (opt-in per device) — lihat step 7b di runSyncCycle(). */
+    private val locationChecker: LocationChecker = LocationChecker.TidakTersedia,
+    /** Simpan hasil cek lokasi supaya KioskViewModel bisa membaca & memblokir layar bila perlu. */
+    private val simpanStatusLokasi: (valid: Boolean, alasan: String) -> Unit = { _, _ -> },
 ) {
     private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 
@@ -255,6 +260,26 @@ class SyncService(
                     )
                 )
             } catch (e: Exception) {
+            }
+
+            // --- 7b. Cek geofencing (best-effort, opt-in per device) ---
+            try {
+                val lokasi = locationChecker.ambilLokasiSaatIni()
+                val hasil = api.cekLokasi(
+                    deviceId,
+                    LokasiCekRequest(
+                        tersedia = lokasi.tersedia,
+                        lat = lokasi.lat,
+                        lng = lokasi.lng,
+                        akurasiMeter = lokasi.akurasiMeter,
+                        mock = lokasi.mock,
+                    )
+                )
+                simpanStatusLokasi(hasil.valid, hasil.alasan)
+            } catch (e: Exception) {
+                // server lama tak punya endpoint ini, atau jaringan bermasalah —
+                // biarkan status lokasi lama (offline-first: jangan blokir kiosk
+                // hanya karena tidak bisa terhubung ke server).
             }
 
             val nowStr = LocalDateTime.now().format(fmt)

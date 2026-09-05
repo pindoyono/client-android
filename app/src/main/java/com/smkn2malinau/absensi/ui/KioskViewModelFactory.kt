@@ -42,6 +42,8 @@ class KioskViewModelFactory(context: Context) : ViewModelProvider.Factory {
             ambangJarak = credentialManager.getAmbangJarak(),
             picuSinkron = { com.smkn2malinau.absensi.sync.SyncWorker.enqueueSekali(appContext) },
             muatModel = { faceEngine.loadModels(LIVENESS_MODEL, EMBEDDING_MODEL) },
+            lokasiValidProvider = { credentialManager.lokasiValid() },
+            lokasiAlasanProvider = { credentialManager.lokasiAlasan() },
         ) as T
     }
 }

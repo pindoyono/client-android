@@ -7,6 +7,7 @@ import com.smkn2malinau.absensi.business.AttendanceLogic
 import com.smkn2malinau.absensi.business.HasilAbsen
 import com.smkn2malinau.absensi.face.FaceEngine
 import com.smkn2malinau.absensi.face.LivenessEvaluator
+import com.smkn2malinau.absensi.data.local.dao.RiwayatAbsenRow
 import com.smkn2malinau.absensi.repository.AbsensiRepository
 import com.smkn2malinau.absensi.repository.RingkasanKiosk
 import com.smkn2malinau.absensi.repository.SiswaCocok
@@ -43,10 +44,17 @@ class KioskViewModel(
     private val picuSinkron: () -> Unit = {},
     /** Pemuatan model ONNX — dijalankan sekali saat ViewModel dibuat. */
     private val muatModel: suspend () -> Unit = {},
+    /** Geofencing (opt-in per device) — hasil cek terakhir dari SyncService, lihat CredentialManager. */
+    private val lokasiValidProvider: () -> Boolean = { true },
+    private val lokasiAlasanProvider: () -> String? = { null },
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        KioskUiState(onSiteTestingSelesai = onSiteTestingSelesai())
+        KioskUiState(
+            onSiteTestingSelesai = onSiteTestingSelesai(),
+            lokasiValid = lokasiValidProvider(),
+            lokasiAlasan = lokasiAlasanProvider(),
+        )
     )
     val uiState: StateFlow<KioskUiState> = _uiState.asStateFlow()
 
@@ -99,9 +107,13 @@ class KioskViewModel(
                     .onFailure { Log.w("KioskViewModel", "Gagal memuat ringkasan kiosk", it) }
                     .getOrNull()
                     ?.let { r -> _uiState.update { it.terapkanRingkasan(r) } }
+                // Geofencing — baca status cek terakhir (ditulis SyncService secara berkala).
+                _uiState.update { it.copy(lokasiValid = lokasiValidProvider(), lokasiAlasan = lokasiAlasanProvider()) }
                 delay(RINGKASAN_REFRESH_MS)
             }
         }
+        // Daftar 5 absensi terakhir (nama + masuk/pulang + keterangan dispensasi) — kartu riwayat kiosk.
+        muatRiwayatAbsen()
         // Picu sync berkala selama kiosk aktif — WorkManager periodik minimal 15 mnt,
         // jadi ini yang bikin absen naik ke server dlm ~1-2 menit (mirip loop 45 dtk Windows).
         viewModelScope.launch {
@@ -175,6 +187,10 @@ class KioskViewModel(
 
     /** Diekspos untuk test E2E — jalur yang sama tanpa throttle/guard. */
     suspend fun prosesFrame(frame: ByteArray) {
+        // Geofencing — kiosk di luar lokasi yang diizinkan tidak memproses wajah sama
+        // sekali (bukan cuma UI disembunyikan; ini mencegah absensi tersimpan sungguhan).
+        if (!lokasiValidProvider()) return
+
         val deteksi = faceEngine.prosesFrame(frame)
         if (!deteksi.wajahTerdeteksi) return
 
@@ -227,11 +243,36 @@ class KioskViewModel(
             // GERBANG UJI LAPANGAN (PRD bagian 10): mode testing => JANGAN simpan ke DB.
             if (onSiteTestingSelesai()) {
                 tersimpan = repo.simpanAbsensi(match.siswaId, hasil, statusOtomatis, dispensasi?.alasan)
-                if (tersimpan) picuSinkronDebounce() // kirim ke server secepatnya
+                if (tersimpan) {
+                    picuSinkronDebounce() // kirim ke server secepatnya
+                    muatRiwayatAbsen()
+                }
             }
         }
 
         tampilkan(petakan(hasil, match, tersimpan, jadwal))
+    }
+
+    private fun muatRiwayatAbsen() {
+        viewModelScope.launch {
+            runCatching { repo.riwayatAbsenTerbaru(5) }
+                .onFailure { Log.w("KioskViewModel", "Gagal memuat riwayat absen", it) }
+                .getOrNull()
+                ?.map(::formatRiwayat)
+                ?.let { baris -> _uiState.update { it.copy(riwayatAbsen = baris) } }
+        }
+    }
+
+    /** "Nama · Masuk/Pulang" + keterangan dispensasi (mis. sakit/izin) bila bukan hadir normal. */
+    private fun formatRiwayat(row: RiwayatAbsenRow): String {
+        val jenis = if (row.type == "PULANG") "Pulang" else "Masuk"
+        val status = row.status_kehadiran_otomatis.trim()
+        val keterangan = when {
+            status.isBlank() || status.equals("NORMAL", ignoreCase = true) -> null
+            row.catatan.isNotBlank() -> "$status (${row.catatan})"
+            else -> status
+        }
+        return listOfNotNull(row.nama, jenis, keterangan).joinToString(" · ")
     }
 
     private fun tampilkan(hasil: HasilScan) {
