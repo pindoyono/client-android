@@ -74,7 +74,12 @@ class AdminViewModel(
                 is GoogleIdTokenProvider.Hasil.Dibatalkan ->
                     selesaiError("Login Google dibatalkan.")
                 is GoogleIdTokenProvider.Hasil.TidakAdaAkun ->
-                    selesaiError("Tidak ada akun Google di perangkat ini. Tambahkan akun sekolah dulu.")
+                    selesaiError(
+                        "Google Sign-In tidak menemukan akun. Pastikan akun sekolah " +
+                            "sudah ditambahkan di Settings > Accounts, Google Play Services " +
+                            "ter-update, dan layar terkunci dengan PIN/pola. Kalau tetap " +
+                            "gagal, pakai input manual device_id + api_key.",
+                    )
                 is GoogleIdTokenProvider.Hasil.Gagal ->
                     selesaiError("Google Sign-In gagal: ${tok.pesan}")
                 is GoogleIdTokenProvider.Hasil.Token -> {

@@ -53,7 +53,10 @@ class LoginViewModel(
             when (val t = googleProvider.ambilIdToken(activityContext)) {
                 is GoogleIdTokenProvider.Hasil.Token -> tangani(auth.loginGoogle(t.idToken), onSukses)
                 is GoogleIdTokenProvider.Hasil.Dibatalkan -> gagal("Login Google dibatalkan.")
-                is GoogleIdTokenProvider.Hasil.TidakAdaAkun -> gagal("Tidak ada akun Google di perangkat ini.")
+                is GoogleIdTokenProvider.Hasil.TidakAdaAkun -> gagal(
+                    "Google Sign-In tidak menemukan akun. Cek akun di Settings > Accounts, " +
+                        "update Google Play Services, dan pasang kunci layar. Atau login pakai email + password.",
+                )
                 is GoogleIdTokenProvider.Hasil.Gagal -> gagal("Google Sign-In gagal: ${t.pesan}")
             }
         }
