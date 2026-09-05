@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -55,6 +56,8 @@ data class KioskUiState(
     val lokasiAlasan: String? = null,
     /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur. */
     val lokasiJarakMeter: Double? = null,
+    /** Admin sudah pasang titik acuan geofencing untuk device ini atau belum — indikator ikon header. */
+    val lokasiDikonfigurasi: Boolean = false,
     /** Sync manual dari header sedang berjalan — dipakai tombol sync untuk spinner. */
     val sedangSync: Boolean = false,
 )
@@ -202,6 +205,12 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekara
                         )
                     }
                 }
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = if (state.lokasiDikonfigurasi) "Lokasi kiosk sudah diatur" else "Lokasi kiosk belum diatur",
+                    tint = if (state.lokasiDikonfigurasi) AbsensiColors.SuksesTeks else AbsensiColors.InkMuted,
+                    modifier = Modifier.padding(start = 4.dp).size(16.dp),
+                )
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,

@@ -60,7 +60,7 @@ class SyncService(
     /** Geofencing (opt-in per device) — lihat step 7b di runSyncCycle(). */
     private val locationChecker: LocationChecker = LocationChecker.TidakTersedia,
     /** Simpan hasil cek lokasi supaya KioskViewModel bisa membaca & memblokir layar bila perlu. */
-    private val simpanStatusLokasi: (valid: Boolean, alasan: String, jarakMeter: Double?) -> Unit = { _, _, _ -> },
+    private val simpanStatusLokasi: (valid: Boolean, alasan: String, jarakMeter: Double?, dikonfigurasi: Boolean) -> Unit = { _, _, _, _ -> },
 ) {
     private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 
@@ -275,7 +275,7 @@ class SyncService(
                         mock = lokasi.mock,
                     )
                 )
-                simpanStatusLokasi(hasil.valid, hasil.alasan, hasil.jarakMeter)
+                simpanStatusLokasi(hasil.valid, hasil.alasan, hasil.jarakMeter, hasil.dikonfigurasi)
             } catch (e: Exception) {
                 // server lama tak punya endpoint ini, atau jaringan bermasalah —
                 // biarkan status lokasi lama (offline-first: jangan blokir kiosk

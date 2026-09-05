@@ -51,6 +51,7 @@ class KioskViewModel(
     private val lokasiValidProvider: () -> Boolean = { true },
     private val lokasiAlasanProvider: () -> String? = { null },
     private val lokasiJarakProvider: () -> Double? = { null },
+    private val lokasiDikonfigurasiProvider: () -> Boolean = { false },
     /** Sync manual dari tombol header kiosk (paksa=true, beda dari picuSinkron yang di-debounce). */
     private val paksaSinkron: () -> Unit = {},
     /** Observasi WorkInfo WORK_SEKALI supaya tombol sync manual punya umpan balik nyata (spinner). */
@@ -63,6 +64,7 @@ class KioskViewModel(
             lokasiValid = lokasiValidProvider(),
             lokasiAlasan = lokasiAlasanProvider(),
             lokasiJarakMeter = lokasiJarakProvider(),
+            lokasiDikonfigurasi = lokasiDikonfigurasiProvider(),
         )
     )
     val uiState: StateFlow<KioskUiState> = _uiState.asStateFlow()
@@ -201,6 +203,7 @@ class KioskViewModel(
                 lokasiValid = lokasiValidProvider(),
                 lokasiAlasan = lokasiAlasanProvider(),
                 lokasiJarakMeter = lokasiJarakProvider(),
+                lokasiDikonfigurasi = lokasiDikonfigurasiProvider(),
             )
         }
     }

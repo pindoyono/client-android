@@ -135,6 +135,8 @@ data class LokasiCekResponse(
     @SerializedName("valid") val valid: Boolean,
     @SerializedName("alasan") val alasan: String,
     @SerializedName("jarak_meter") val jarakMeter: Double? = null,
+    /** Admin sudah pasang titik acuan untuk device ini atau belum — lepas dari `valid`. */
+    @SerializedName("dikonfigurasi") val dikonfigurasi: Boolean = false,
 )
 
 // --- Roster akun (seed login offline) — GET /auth/roster ---

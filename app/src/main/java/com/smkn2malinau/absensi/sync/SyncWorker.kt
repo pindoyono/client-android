@@ -40,7 +40,9 @@ class SyncWorker(
             val syncService = SyncService(
                 repo, api, deviceId,
                 locationChecker = FusedLocationChecker(applicationContext),
-                simpanStatusLokasi = { valid, alasan, jarak -> credentialManager.setStatusLokasi(valid, alasan, jarak) },
+                simpanStatusLokasi = { valid, alasan, jarak, dikonfigurasi ->
+                    credentialManager.setStatusLokasi(valid, alasan, jarak, dikonfigurasi)
+                },
             )
             val result = syncService.runSyncCycle()
 

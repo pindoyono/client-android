@@ -47,6 +47,7 @@ class KioskViewModelFactory(context: Context) : ViewModelProvider.Factory {
             lokasiValidProvider = { credentialManager.lokasiValid() },
             lokasiAlasanProvider = { credentialManager.lokasiAlasan() },
             lokasiJarakProvider = { credentialManager.lokasiJarakMeter() },
+            lokasiDikonfigurasiProvider = { credentialManager.lokasiDikonfigurasi() },
             paksaSinkron = { SyncWorker.enqueueSekali(appContext, paksa = true) },
             workManager = WorkManager.getInstance(appContext),
         ) as T
