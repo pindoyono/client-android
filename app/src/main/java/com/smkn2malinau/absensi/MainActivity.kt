@@ -120,7 +120,8 @@ private fun KioskRoot(onOpenAdmin: () -> Unit) {
     KioskScreen(
         state = state,
         kameraSiap = hasCameraPermission,
-        onOpenAdmin = onOpenAdmin
+        onOpenAdmin = onOpenAdmin,
+        onSyncSekarang = { SyncWorker.enqueueSekali(context, paksa = true) }
     ) {
         if (hasCameraPermission) {
             CameraView(

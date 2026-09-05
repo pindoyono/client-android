@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -104,6 +105,7 @@ fun KioskScreen(
     state: KioskUiState,
     kameraSiap: Boolean = true,
     onOpenAdmin: () -> Unit = {},
+    onSyncSekarang: () -> Unit = {},
     cameraContent: @Composable () -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize().background(AbsensiColors.Bg)) {
@@ -124,7 +126,7 @@ fun KioskScreen(
         )
 
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            BarisAtas(state, onOpenAdmin)
+            BarisAtas(state, onOpenAdmin, onSyncSekarang)
 
             if (!state.lokasiValid) {
                 Box(
@@ -171,7 +173,7 @@ fun KioskScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
+private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekarang: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -183,7 +185,17 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PilStatusJaringan(state.statusJaringan)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                PilStatusJaringan(state.statusJaringan)
+                IconButton(onClick = onSyncSekarang, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Sync sekarang",
+                        tint = AbsensiColors.InkSoft,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spasi.sm)
