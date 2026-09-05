@@ -81,6 +81,8 @@ data class RingkasanKiosk(
     val jumlahJadwal: Int = 0,
     /** Jam masuk/pulang untuk header — jadwal umum hari ini, fallback jadwal pertama tersedia. */
     val jadwalHariIni: AttendanceLogic.JadwalEfektif? = null,
+    /** Jadwal yang ditampilkan berasal dari override (lokal atau server), bukan jadwal standar. */
+    val jadwalOverride: Boolean = false,
     val kesegaran: KesegaranData = KesegaranData(),
 )
 
@@ -252,6 +254,7 @@ class AbsensiRepositoryImpl(
         val antre = db.absensiDao().countMenunggu() + db.absensiDao().countGagal()
         val wajah = db.siswaDao().countEmbedding()
         val jadwalCount = db.jadwalDao().countJadwalCache()
+        val header = jadwalHeaderHariIni(tanggal)
         return RingkasanKiosk(
             syncTerakhir = syncTerakhir,
             sinkronTerakhirSukses = eventTerakhir?.status == "success",
@@ -259,20 +262,41 @@ class AbsensiRepositoryImpl(
             antreKirim = antre,
             jumlahWajah = wajah,
             jumlahJadwal = jadwalCount,
-            jadwalHariIni = jadwalHeaderHariIni(tanggal),
+            jadwalHariIni = header?.jadwal,
+            jadwalOverride = header?.dariOverride == true,
             kesegaran = hitungKesegaran(),
         )
     }
 
     override suspend fun riwayatAbsenTerbaru(limit: Int): List<RiwayatAbsenRow> = db.absensiDao().riwayatAbsenTerbaru(limit)
 
-    /** Jadwal umum hari ini; bila tak ada, jadwal kelas mana pun untuk HARI INI. */
-    private suspend fun jadwalHeaderHariIni(tanggal: String): AttendanceLogic.JadwalEfektif? {
-        jadwalEfektif("", tanggal)?.let { return it }
+    /** Jadwal + apakah berasal dari override, untuk header kiosk. */
+    private data class HeaderJadwal(val jadwal: AttendanceLogic.JadwalEfektif, val dariOverride: Boolean)
+
+    /**
+     * Jadwal umum hari ini; bila tak ada, jadwal kelas mana pun untuk HARI INI.
+     * Menandai bila nilainya berasal dari override — lokal (`jadwal_override_lokal`)
+     * atau server (`jadwal_cache.sumber = 'override'`) — supaya header kiosk bisa
+     * menampilkan penanda "(override)".
+     */
+    private suspend fun jadwalHeaderHariIni(tanggal: String): HeaderJadwal? {
+        // 1. Override lokal umum untuk hari ini — menang atas jadwal standar.
+        db.jadwalDao().getOverrideTerbaru("", tanggal)?.let { ov ->
+            val masuk = parseJam(ov.jam_masuk)
+            val pulang = parseJam(ov.jam_pulang)
+            if (masuk != null && pulang != null) return HeaderJadwal(AttendanceLogic.JadwalEfektif(masuk, pulang), true)
+        }
+        // 2. Jadwal umum (kelas "") hari ini — bisa standar atau override server.
+        db.jadwalDao().getJadwal("", tanggal)?.let { j ->
+            val masuk = parseJam(j.jam_masuk)
+            val pulang = parseJam(j.jam_pulang)
+            if (masuk != null && pulang != null) return HeaderJadwal(AttendanceLogic.JadwalEfektif(masuk, pulang), j.sumber == "override")
+        }
+        // 3. Jadwal kelas mana pun untuk hari ini.
         val row = db.jadwalDao().getJadwalHariIni(tanggal) ?: return null
         val masuk = parseJam(row.jam_masuk) ?: return null
         val pulang = parseJam(row.jam_pulang) ?: return null
-        return AttendanceLogic.JadwalEfektif(masuk, pulang)
+        return HeaderJadwal(AttendanceLogic.JadwalEfektif(masuk, pulang), row.sumber == "override")
     }
 
     private suspend fun hitungKesegaran(): KesegaranData {

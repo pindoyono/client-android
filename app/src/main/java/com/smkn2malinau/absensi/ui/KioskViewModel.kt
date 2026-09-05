@@ -168,6 +168,7 @@ class KioskViewModel(
             ),
             jadwalMasuk = r.jadwalHariIni?.jamMasuk?.format(JAM_FMT),
             jadwalPulang = r.jadwalHariIni?.jamPulang?.format(JAM_FMT),
+            jadwalOverride = r.jadwalOverride,
             kesegaran = when {
                 !r.kesegaran.diketahui -> KesegaranUi.TIDAK_DIKETAHUI
                 r.kesegaran.segar -> KesegaranUi.SEGAR

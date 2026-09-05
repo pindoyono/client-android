@@ -6,6 +6,7 @@ import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.RosterItemDto
 import com.smkn2malinau.absensi.data.remote.SiswaRosterDto
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
@@ -31,6 +32,9 @@ class SyncRepositoryImpl(private val db: AbsensiDatabase) : SyncRepository {
         db.siswaDao().getSemuaSiswa().map { it.kelas }.filter { it.isNotBlank() }.distinct()
     override suspend fun getUnsyncedOverrides(): List<JadwalOverrideLokal> = db.jadwalDao().getAntrianSyncOverride()
     override suspend fun updateOverrideLokal(override: JadwalOverrideLokal) = db.jadwalDao().updateOverrideLokal(override)
+    override suspend fun hapusOverrideLokalKedaluwarsa() {
+        db.jadwalDao().hapusOverrideKedaluwarsa(LocalDate.now().toString())
+    }
     override suspend fun insertSyncEvent(log: SyncEventLog) = db.logDao().insertSyncEvent(log)
     override suspend fun insertLiveness(log: LivenessLog) = db.logDao().insertLiveness(log)
 

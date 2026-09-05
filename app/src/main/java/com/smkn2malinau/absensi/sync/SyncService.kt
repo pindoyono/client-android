@@ -27,6 +27,8 @@ interface SyncRepository {
     suspend fun daftarKelas(): List<String>
     suspend fun getUnsyncedOverrides(): List<JadwalOverrideLokal>
     suspend fun updateOverrideLokal(override: JadwalOverrideLokal)
+    /** Buang override lokal untuk tanggal yang sudah lewat (tidak berlaku lagi). */
+    suspend fun hapusOverrideLokalKedaluwarsa()
     suspend fun insertSyncEvent(log: SyncEventLog)
     suspend fun insertLiveness(log: LivenessLog)
     /** Seed akun login offline dari `GET /auth/roster` (PRD R-P1-2). */
@@ -243,6 +245,12 @@ class SyncService(
                 } catch (e: Exception) {
                     // koneksi bermasalah — coba lagi siklus berikutnya.
                 }
+            }
+            // Bersihkan override lokal tanggal lewat — sudah tak berlaku & bikin
+            // daftar Panel Admin menumpuk (override HARI INI/mendatang aman).
+            try {
+                repo.hapusOverrideLokalKedaluwarsa()
+            } catch (e: Exception) {
             }
 
             // --- 6. Seed akun login offline dari roster (PRD R-P1-2) ---

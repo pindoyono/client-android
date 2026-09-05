@@ -36,6 +36,15 @@ interface JadwalDao {
     @Query("DELETE FROM jadwal_override_lokal WHERE id = :id")
     suspend fun deleteOverrideLokal(id: String)
 
+    /**
+     * Buang override lokal untuk tanggal yang sudah lewat — sudah tidak berlaku
+     * (override selalu spesifik per tanggal) dan hanya bikin daftar Panel Admin
+     * menumpuk. Dipanggil tiap siklus sync. Tidak menyentuh override HARI INI /
+     * mendatang, termasuk yang belum sempat di-push.
+     */
+    @Query("DELETE FROM jadwal_override_lokal WHERE tanggal < :hariIni")
+    suspend fun hapusOverrideKedaluwarsa(hariIni: String): Int
+
     @Query("SELECT * FROM jadwal_cache ORDER BY kelas, tanggal")
     suspend fun getSemuaJadwalCache(): List<JadwalCache>
 

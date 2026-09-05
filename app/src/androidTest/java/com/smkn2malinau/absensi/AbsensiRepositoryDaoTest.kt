@@ -114,6 +114,38 @@ class AbsensiRepositoryDaoTest {
     }
 
     @Test
+    fun ringkasanKiosk_tandai_jadwal_override_saat_override_lokal_umum_ada() = runBlocking {
+        db.jadwalDao().insertJadwal(
+            listOf(JadwalCache("", hariIni, "SELASA", "07:00", "15:00", "standar", "now"))
+        )
+        // override umum (kelas null) untuk hari ini
+        db.jadwalDao().insertOverride(
+            JadwalOverrideLokal(
+                id = "ov", tanggal = hariIni, kelas = null,
+                jam_masuk = "10:28", jam_pulang = "10:30", alasan = "uji",
+                dibuat_pada = "2026-09-06T06:00:00"
+            )
+        )
+
+        val r = repo.ringkasanKiosk(hariIni)
+
+        assertTrue("header harus ditandai override", r.jadwalOverride)
+        assertEquals(LocalTime.of(10, 28), r.jadwalHariIni!!.jamMasuk)
+    }
+
+    @Test
+    fun ringkasanKiosk_tanpa_override_tidak_ditandai() = runBlocking {
+        db.jadwalDao().insertJadwal(
+            listOf(JadwalCache("", hariIni, "SELASA", "07:00", "15:00", "standar", "now"))
+        )
+
+        val r = repo.ringkasanKiosk(hariIni)
+
+        assertFalse(r.jadwalOverride)
+        assertEquals(LocalTime.of(7, 0), r.jadwalHariIni!!.jamMasuk)
+    }
+
+    @Test
     fun dispensasiAktif_utamakan_jenis_pulang_cepat() = runBlocking {
         db.jadwalDao().insertDispensasi(
             listOf(

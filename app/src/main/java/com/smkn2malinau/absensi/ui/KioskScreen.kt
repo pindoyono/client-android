@@ -47,6 +47,8 @@ data class KioskUiState(
     val ringkasanSync: RingkasanSyncUi? = null,
     val jadwalMasuk: String? = null,
     val jadwalPulang: String? = null,
+    /** Jadwal di header berasal dari override (bukan jadwal standar). */
+    val jadwalOverride: Boolean = false,
     val kesegaran: KesegaranUi = KesegaranUi.TIDAK_DIKETAHUI,
     val dataBasi: List<String> = emptyList(),
     /** Baris "Nama · Masuk/Pulang · keterangan" dari 5 absensi terakhir — daftar persisten di kiosk. */
@@ -245,7 +247,7 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekara
             horizontalArrangement = Arrangement.spacedBy(Spasi.sm),
             verticalArrangement = Arrangement.spacedBy(Spasi.xs),
         ) {
-            ChipJadwal(state.jadwalMasuk, state.jadwalPulang)
+            ChipJadwal(state.jadwalMasuk, state.jadwalPulang, state.jadwalOverride)
             when (state.kesegaran) {
                 KesegaranUi.SEGAR ->
                     ChipInfo("✓ Data segar", AbsensiColors.SuksesTeks, AbsensiColors.SuksesBg)
@@ -273,16 +275,21 @@ private fun formatJarak(meter: Double): String =
     if (meter < 1000) "${meter.toInt()}m" else "%.1fkm".format(meter / 1000)
 
 @Composable
-private fun ChipJadwal(masuk: String?, pulang: String?) {
+private fun ChipJadwal(masuk: String?, pulang: String?, dariOverride: Boolean = false) {
+    val warna = if (dariOverride) AbsensiColors.WarningTeks else AbsensiColors.Border
     Surface(
         color = AbsensiColors.Surface2,
         contentColor = AbsensiColors.Ink,
         shape = MaterialTheme.shapes.small,
-        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border)
+        border = androidx.compose.foundation.BorderStroke(1.dp, warna)
     ) {
         Text(
-            text = "Masuk: ${masuk ?: "--:--"}   Pulang: ${pulang ?: "--:--"}",
+            text = buildString {
+                append("Masuk: ${masuk ?: "--:--"}   Pulang: ${pulang ?: "--:--"}")
+                if (dariOverride) append("  · override")
+            },
             style = MaterialTheme.typography.labelLarge,
+            color = if (dariOverride) AbsensiColors.WarningTeks else AbsensiColors.Ink,
             modifier = Modifier.padding(horizontal = Spasi.md, vertical = 6.dp)
         )
     }

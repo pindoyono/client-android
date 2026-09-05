@@ -445,6 +445,8 @@ class SyncServiceTest {
         override suspend fun daftarKelas() = kelas
         override suspend fun getUnsyncedOverrides() = unsyncedOverrides
         override suspend fun updateOverrideLokal(override: JadwalOverrideLokal) { updatedOverride[override.id] = override }
+        var overrideKedaluwarsaDibersihkan = 0
+        override suspend fun hapusOverrideLokalKedaluwarsa() { overrideKedaluwarsaDibersihkan++ }
         override suspend fun insertSyncEvent(log: SyncEventLog) { syncEvents.add(log) }
         override suspend fun insertLiveness(log: LivenessLog) {}
         val rosterDiseed = mutableListOf<com.smkn2malinau.absensi.data.remote.RosterItemDto>()
