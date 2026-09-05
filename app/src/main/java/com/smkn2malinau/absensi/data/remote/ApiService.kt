@@ -60,4 +60,9 @@ interface ApiService {
         @Path("id") deviceId: String,
         @Body request: LokasiCekRequest,
     ): LokasiCekResponse
+
+    // 10. Tarik konfigurasi lokasi sendiri (titik acuan + radius apa adanya) —
+    // di-cache lokal untuk validasi jarak mandiri (GeoOffline) saat offline.
+    @GET("device/{id}/lokasi")
+    suspend fun getLokasiKonfig(@Path("id") deviceId: String): LokasiKonfigResponse
 }

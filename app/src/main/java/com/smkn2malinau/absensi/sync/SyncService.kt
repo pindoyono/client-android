@@ -2,6 +2,9 @@ package com.smkn2malinau.absensi.sync
 
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.*
+import com.smkn2malinau.absensi.location.GeoOffline
+import com.smkn2malinau.absensi.location.HasilLokasi
+import com.smkn2malinau.absensi.location.KonfigLokasi
 import com.smkn2malinau.absensi.location.LocationChecker
 import retrofit2.HttpException
 import java.time.DayOfWeek
@@ -61,6 +64,9 @@ class SyncService(
     private val locationChecker: LocationChecker = LocationChecker.TidakTersedia,
     /** Simpan hasil cek lokasi supaya KioskViewModel bisa membaca & memblokir layar bila perlu. */
     private val simpanStatusLokasi: (valid: Boolean, alasan: String, jarakMeter: Double?, dikonfigurasi: Boolean) -> Unit = { _, _, _, _ -> },
+    /** Cache titik acuan geofencing lokal — dipakai validasi offline (GeoOffline) saat POST /lokasi/cek tak terjangkau. */
+    private val simpanKonfigLokasi: (lat: Double?, lng: Double?, radiusMeter: Int?) -> Unit = { _, _, _ -> },
+    private val ambilKonfigLokasi: () -> KonfigLokasi = { KonfigLokasi(null, null, null) },
 ) {
     private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 
@@ -262,24 +268,54 @@ class SyncService(
             } catch (e: Exception) {
             }
 
-            // --- 7b. Cek geofencing (best-effort, opt-in per device) ---
+            // --- 7b. Cek geofencing (opt-in per device) — online kalau bisa,
+            // fallback validasi jarak (Haversine) LOKAL kalau server tak
+            // terjangkau, alih-alih cuma diam memakai status lama selamanya. ---
             try {
-                val lokasi = locationChecker.ambilLokasiSaatIni()
-                val hasil = api.cekLokasi(
-                    deviceId,
-                    LokasiCekRequest(
-                        tersedia = lokasi.tersedia,
-                        lat = lokasi.lat,
-                        lng = lokasi.lng,
-                        akurasiMeter = lokasi.akurasiMeter,
-                        mock = lokasi.mock,
+                val lokasi = try {
+                    locationChecker.ambilLokasiSaatIni()
+                } catch (e: Exception) {
+                    HasilLokasi(tersedia = false)
+                }
+
+                // Tarik & cache konfigurasi referensi terbaru kalau online —
+                // inilah yang dipakai validasi offline pada siklus berikutnya.
+                val konfigTerbaru = try {
+                    val k = api.getLokasiKonfig(deviceId)
+                    simpanKonfigLokasi(k.lokasiLat, k.lokasiLng, k.radiusMeter)
+                    KonfigLokasi(k.lokasiLat, k.lokasiLng, k.radiusMeter)
+                } catch (e: Exception) {
+                    null
+                }
+
+                val hasilOnline = try {
+                    api.cekLokasi(
+                        deviceId,
+                        LokasiCekRequest(
+                            tersedia = lokasi.tersedia,
+                            lat = lokasi.lat,
+                            lng = lokasi.lng,
+                            akurasiMeter = lokasi.akurasiMeter,
+                            mock = lokasi.mock,
+                        )
                     )
-                )
-                simpanStatusLokasi(hasil.valid, hasil.alasan, hasil.jarakMeter, hasil.dikonfigurasi)
+                } catch (e: Exception) {
+                    null
+                }
+
+                if (hasilOnline != null) {
+                    simpanStatusLokasi(hasilOnline.valid, hasilOnline.alasan, hasilOnline.jarakMeter, hasilOnline.dikonfigurasi)
+                } else {
+                    // Server tak terjangkau (device offline, atau server lama tak
+                    // punya endpoint ini) — validasi sendiri pakai konfigurasi yang
+                    // sudah di-cache (baru saja ditarik, atau dari sync sebelumnya).
+                    val konfig = konfigTerbaru ?: ambilKonfigLokasi()
+                    val hasilOffline = GeoOffline.validasi(lokasi, konfig)
+                    simpanStatusLokasi(hasilOffline.valid, hasilOffline.alasan, hasilOffline.jarakMeter, hasilOffline.dikonfigurasi)
+                }
             } catch (e: Exception) {
-                // server lama tak punya endpoint ini, atau jaringan bermasalah —
-                // biarkan status lokasi lama (offline-first: jangan blokir kiosk
-                // hanya karena tidak bisa terhubung ke server).
+                // Kegagalan tak terduga (mis. locationChecker sendiri crash total) —
+                // biarkan status lokasi lama, jangan gagalkan seluruh siklus sync.
             }
 
             val nowStr = LocalDateTime.now().format(fmt)

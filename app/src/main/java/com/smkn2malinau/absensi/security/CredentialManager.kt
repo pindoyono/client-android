@@ -33,6 +33,9 @@ class CredentialManager(context: Context) {
     private val PREF_LOKASI_JARAK = "lokasi_jarak_meter_terakhir"
     private val PREF_LOKASI_DIKONFIGURASI = "lokasi_dikonfigurasi"
     private val PREF_LOKASI_MIGRASI_FAILCLOSED = "lokasi_migrasi_failclosed_v1"
+    private val PREF_LOKASI_REF_LAT = "lokasi_ref_lat"
+    private val PREF_LOKASI_REF_LNG = "lokasi_ref_lng"
+    private val PREF_LOKASI_REF_RADIUS = "lokasi_ref_radius_meter"
     private val PREF_NAMA_LOKASI = "nama_lokasi"
     private val PREF_ADMIN_NAMA = "admin_nama"
     private val PREF_ADMIN_ROLE = "admin_role"
@@ -302,6 +305,29 @@ class CredentialManager(context: Context) {
     fun lokasiDikonfigurasi(): Boolean {
         migrasiLokasiFailClosedJikaPerlu()
         return prefs.getBoolean(PREF_LOKASI_DIKONFIGURASI, false)
+    }
+
+    /**
+     * Titik acuan + radius geofencing device ini, apa adanya (bukan hasil
+     * cek) — di-cache dari GET /device/{id}/lokasi tiap sync berhasil online,
+     * dipakai SyncService untuk validasi jarak (Haversine) mandiri saat
+     * offline. Null semua = belum pernah berhasil menarik konfigurasi ini
+     * SAMA SEKALI (bukan berarti "belum diatur" — itu dibedakan lewat
+     * lokasiDikonfigurasi() yang datang dari hasil cek, bukan dari cache ini).
+     */
+    fun setKonfigLokasi(lat: Double?, lng: Double?, radiusMeter: Int?) {
+        val editor = prefs.edit()
+        if (lat != null) editor.putFloat(PREF_LOKASI_REF_LAT, lat.toFloat()) else editor.remove(PREF_LOKASI_REF_LAT)
+        if (lng != null) editor.putFloat(PREF_LOKASI_REF_LNG, lng.toFloat()) else editor.remove(PREF_LOKASI_REF_LNG)
+        if (radiusMeter != null) editor.putInt(PREF_LOKASI_REF_RADIUS, radiusMeter) else editor.remove(PREF_LOKASI_REF_RADIUS)
+        editor.apply()
+    }
+
+    fun konfigLokasi(): Triple<Double?, Double?, Int?> {
+        val lat = if (prefs.contains(PREF_LOKASI_REF_LAT)) prefs.getFloat(PREF_LOKASI_REF_LAT, 0f).toDouble() else null
+        val lng = if (prefs.contains(PREF_LOKASI_REF_LNG)) prefs.getFloat(PREF_LOKASI_REF_LNG, 0f).toDouble() else null
+        val radius = if (prefs.contains(PREF_LOKASI_REF_RADIUS)) prefs.getInt(PREF_LOKASI_REF_RADIUS, 0) else null
+        return Triple(lat, lng, radius)
     }
 
     /**

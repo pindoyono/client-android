@@ -139,6 +139,13 @@ data class LokasiCekResponse(
     @SerializedName("dikonfigurasi") val dikonfigurasi: Boolean = false,
 )
 
+/** Titik acuan geofencing device ini apa adanya — GET /device/{id}/lokasi, di-cache untuk validasi offline. */
+data class LokasiKonfigResponse(
+    @SerializedName("lokasi_lat") val lokasiLat: Double? = null,
+    @SerializedName("lokasi_lng") val lokasiLng: Double? = null,
+    @SerializedName("radius_meter") val radiusMeter: Int? = null,
+)
+
 // --- Roster akun (seed login offline) — GET /auth/roster ---
 
 data class RosterResponse(

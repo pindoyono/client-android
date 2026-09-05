@@ -3,6 +3,7 @@ package com.smkn2malinau.absensi.sync
 import com.smkn2malinau.absensi.data.local.entity.*
 import com.smkn2malinau.absensi.data.remote.*
 import com.smkn2malinau.absensi.location.HasilLokasi
+import com.smkn2malinau.absensi.location.KonfigLokasi
 import com.smkn2malinau.absensi.location.LocationChecker
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -202,19 +203,102 @@ class SyncServiceTest {
     }
 
     @Test
-    fun `cek lokasi gagal - siklus tetap sukses, status lama tidak ditimpa`() = runTest {
+    fun `cek lokasi online gagal tapi konfigurasi ter-cache - fallback validasi lokal jalan`() = runTest {
         val repo = FakeSyncRepo()
-        val api = FakeApi(throwOnLokasiCek = true)
-        var dipanggil = false
+        // getLokasiKonfig gagal juga (offline sungguhan) -> pakai cache dari sync SEBELUMNYA.
+        val api = FakeApi(throwOnLokasiCek = true, throwOnLokasiKonfig = true)
+        var tersimpan: BooleanArray? = null
+        var alasanTersimpan: String? = null
+        var jarakTersimpan: Double? = null
+
+        // Titik acuan & radius yang "sudah pernah" di-cache sebelum device offline.
+        val titikAcuan = KonfigLokasi(lat = -3.4295, lng = 116.4396, radiusMeter = 100)
 
         val result = SyncService(
             repo, api, "d",
-            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = false)),
-            simpanStatusLokasi = { _, _, _, _ -> dipanggil = true },
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4295, lng = 116.4396)),
+            simpanStatusLokasi = { valid, alasan, jarak, _ ->
+                tersimpan = booleanArrayOf(valid)
+                alasanTersimpan = alasan
+                jarakTersimpan = jarak
+            },
+            ambilKonfigLokasi = { titikAcuan },
         ).runSyncCycle()
 
         assertTrue(result is SyncResult.Success)
-        assertTrue(!dipanggil) // best-effort: gagal panggil server -> callback tidak dipanggil sama sekali
+        assertEquals(true, tersimpan?.get(0)) // tepat di titik acuan -> dalam radius
+        assertTrue(alasanTersimpan!!.contains("[offline]"))
+        assertTrue(jarakTersimpan!! < 1.0)
+    }
+
+    @Test
+    fun `cek lokasi online gagal, di luar radius - fallback lokal menolak`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(throwOnLokasiCek = true, throwOnLokasiKonfig = true)
+        var validTersimpan: Boolean? = null
+        val titikAcuan = KonfigLokasi(lat = -3.4295, lng = 116.4396, radiusMeter = 50)
+
+        SyncService(
+            repo, api, "d",
+            // ~1.1km dari titik acuan (0.01 derajat lat)
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4195, lng = 116.4396)),
+            simpanStatusLokasi = { valid, _, _, _ -> validTersimpan = valid },
+            ambilKonfigLokasi = { titikAcuan },
+        ).runSyncCycle()
+
+        assertEquals(false, validTersimpan)
+    }
+
+    @Test
+    fun `cek lokasi online gagal, GPS palsu - fallback lokal tetap menolak`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(throwOnLokasiCek = true, throwOnLokasiKonfig = true)
+        var validTersimpan: Boolean? = null
+        var alasanTersimpan: String? = null
+
+        SyncService(
+            repo, api, "d",
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4295, lng = 116.4396, mock = true)),
+            simpanStatusLokasi = { valid, alasan, _, _ -> validTersimpan = valid; alasanTersimpan = alasan },
+            ambilKonfigLokasi = { KonfigLokasi(-3.4295, 116.4396, 100) },
+        ).runSyncCycle()
+
+        assertEquals(false, validTersimpan)
+        assertTrue(alasanTersimpan!!.contains("palsu"))
+    }
+
+    @Test
+    fun `cek lokasi online gagal dan belum pernah ada konfigurasi ter-cache - fail-closed`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(throwOnLokasiCek = true, throwOnLokasiKonfig = true)
+        var validTersimpan: Boolean? = null
+
+        SyncService(
+            repo, api, "d",
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4295, lng = 116.4396)),
+            simpanStatusLokasi = { valid, _, _, _ -> validTersimpan = valid },
+            ambilKonfigLokasi = { KonfigLokasi(null, null, null) }, // belum pernah online sama sekali
+        ).runSyncCycle()
+
+        assertEquals(false, validTersimpan)
+    }
+
+    @Test
+    fun `cek lokasi online berhasil - konfigurasi ikut di-cache untuk offline berikutnya`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(
+            lokasiCekResponse = LokasiCekResponse(valid = true, alasan = "dalam radius", jarakMeter = 5.0, dikonfigurasi = true),
+            lokasiKonfigResponse = LokasiKonfigResponse(lokasiLat = -3.4295, lokasiLng = 116.4396, radiusMeter = 100),
+        )
+        var konfigTersimpan: Triple<Double?, Double?, Int?>? = null
+
+        SyncService(
+            repo, api, "d",
+            locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4295, lng = 116.4396)),
+            simpanKonfigLokasi = { lat, lng, radius -> konfigTersimpan = Triple(lat, lng, radius) },
+        ).runSyncCycle()
+
+        assertEquals(Triple(-3.4295, 116.4396, 100), konfigTersimpan)
     }
 
     @Test
@@ -248,6 +332,8 @@ class SyncServiceTest {
         private val throwOnEmbeddings: Boolean = false,
         private val lokasiCekResponse: LokasiCekResponse = LokasiCekResponse(valid = true, alasan = "lokasi belum diatur"),
         private val throwOnLokasiCek: Boolean = false,
+        private val lokasiKonfigResponse: LokasiKonfigResponse = LokasiKonfigResponse(),
+        private val throwOnLokasiKonfig: Boolean = false,
     ) : ApiService {
         var lastSyncRequest: SyncAbsensiRequest? = null
         var lastOverrideRequest: PushOverrideRequest? = null
@@ -284,6 +370,10 @@ class SyncServiceTest {
             if (throwOnLokasiCek) throw RuntimeException("boom")
             lastLokasiCekRequest = request
             return lokasiCekResponse
+        }
+        override suspend fun getLokasiKonfig(deviceId: String): LokasiKonfigResponse {
+            if (throwOnLokasiKonfig) throw RuntimeException("boom")
+            return lokasiKonfigResponse
         }
     }
 

@@ -14,6 +14,7 @@ import androidx.work.WorkManager
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.remote.ApiClientProvider
 import com.smkn2malinau.absensi.location.FusedLocationChecker
+import com.smkn2malinau.absensi.location.KonfigLokasi
 import com.smkn2malinau.absensi.security.CredentialManager
 import java.util.concurrent.TimeUnit
 
@@ -42,6 +43,11 @@ class SyncWorker(
                 locationChecker = FusedLocationChecker(applicationContext),
                 simpanStatusLokasi = { valid, alasan, jarak, dikonfigurasi ->
                     credentialManager.setStatusLokasi(valid, alasan, jarak, dikonfigurasi)
+                },
+                simpanKonfigLokasi = { lat, lng, radius -> credentialManager.setKonfigLokasi(lat, lng, radius) },
+                ambilKonfigLokasi = {
+                    val (lat, lng, radius) = credentialManager.konfigLokasi()
+                    KonfigLokasi(lat, lng, radius)
                 },
             )
             val result = syncService.runSyncCycle()

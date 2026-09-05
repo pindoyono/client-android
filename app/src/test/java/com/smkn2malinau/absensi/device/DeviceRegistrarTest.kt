@@ -155,5 +155,6 @@ class DeviceRegistrarTest {
         override suspend fun getRoster() = error("n/a")
         override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = error("n/a")
         override suspend fun cekLokasi(deviceId: String, request: LokasiCekRequest) = error("n/a")
+        override suspend fun getLokasiKonfig(deviceId: String) = error("n/a")
     }
 }
