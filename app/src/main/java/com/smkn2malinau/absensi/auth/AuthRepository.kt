@@ -40,6 +40,8 @@ class AuthRepository(
     private val akunDao: AkunDao,
     private val credentialManager: CredentialManager,
     private val api: ApiService,
+    /** NIS -> siswa_id dari siswa_cache lokal — dipakai loginGoogle() saat role="siswa". */
+    private val resolveSiswaId: suspend (nis: String) -> Int? = { null },
 ) {
     private val _sesi = MutableStateFlow(credentialManager.getSesiTersimpan()?.let {
         SesiPengguna(it.identitas, it.nama, Role.dari(it.role), it.siswaId)
@@ -57,16 +59,29 @@ class AuthRepository(
             api.loginGoogle(GoogleLoginRequest(idToken))
         } catch (e: HttpException) {
             return when (e.code()) {
-                401, 403 -> HasilLogin.Gagal("Akun $email belum terdaftar sebagai guru di server. Hubungi admin sekolah.")
+                401, 403 -> HasilLogin.Gagal("Akun $email belum terdaftar di server. Hubungi admin sekolah.")
                 else -> HasilLogin.Gagal("Login server gagal (HTTP ${e.code()}).")
             }
         } catch (e: Exception) {
-            return HasilLogin.Gagal("Tidak bisa menghubungi server — pakai login offline (email + password).")
+            return HasilLogin.Gagal("Tidak bisa menghubungi server — pakai login offline (email/NIS + password).")
         }
 
         val role = Role.dari(resp.role)
+        val nama = resp.nama?.takeIf { it.isNotBlank() } ?: namaGoogle ?: email
+
+        if (role == Role.SISWA) {
+            val nis = resp.nis?.trim()
+            if (nis.isNullOrBlank()) {
+                return HasilLogin.Gagal("Akun siswa ini belum tertaut NIS di server. Hubungi admin sekolah.")
+            }
+            val siswaId = resolveSiswaId(nis)
+            upsertSiswaDariServer(nis, nama, siswaId)
+            val sesi = SesiPengguna(nis.lowercase(), nama, Role.SISWA, siswaId)
+            mulaiSesi(sesi)
+            return HasilLogin.Sukses(sesi)
+        }
+
         val emailFinal = resp.email?.takeIf { it.isNotBlank() }?.lowercase() ?: email
-        val nama = resp.nama?.takeIf { it.isNotBlank() } ?: namaGoogle ?: emailFinal
         upsertDariServer(emailFinal, nama, role)
         mulaiSesi(SesiPengguna(emailFinal, nama, role))
         return HasilLogin.Sukses(_sesi.value!!)
@@ -188,6 +203,28 @@ class AuthRepository(
                 password_hash = lama?.password_hash, // pertahankan password offline yang sudah ada
                 salt = lama?.salt,
                 siswa_id = lama?.siswa_id,
+                diperbarui_pada = waktu(),
+            )
+        )
+    }
+
+    /**
+     * Login Google untuk siswa — identitas TETAP NIS (bukan email), supaya
+     * akun yang sama dipakai baik login Google maupun NIS+password yang
+     * sudah ada (mis. dari AkunSiswaSeeder). Password NIS yang sudah
+     * di-set siswa sendiri tidak ikut ditimpa.
+     */
+    private suspend fun upsertSiswaDariServer(nis: String, nama: String, siswaId: Int?) {
+        val id = nis.trim().lowercase()
+        val lama = akunDao.getByIdentitasApaPun(id)
+        akunDao.upsert(
+            AkunLokal(
+                identitas = id,
+                nama = nama.ifBlank { id },
+                role = Role.SISWA.kode,
+                password_hash = lama?.password_hash,
+                salt = lama?.salt,
+                siswa_id = siswaId ?: lama?.siswa_id,
                 diperbarui_pada = waktu(),
             )
         )

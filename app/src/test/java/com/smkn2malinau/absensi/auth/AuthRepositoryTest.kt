@@ -19,7 +19,11 @@ class AuthRepositoryTest {
         every { it.getSesiTersimpan() } returns null
     }
 
-    private fun repo(dao: AkunDao, api: ApiService = FakeApi()) = AuthRepository(dao, cm, api)
+    private fun repo(
+        dao: AkunDao,
+        api: ApiService = FakeApi(),
+        resolveSiswaId: suspend (String) -> Int? = { null },
+    ) = AuthRepository(dao, cm, api, resolveSiswaId)
 
     private fun fakeIdToken(email: String, nama: String): String {
         val payload = Base64.getUrlEncoder().withoutPadding()
@@ -59,6 +63,41 @@ class AuthRepositoryTest {
         assertTrue(hasil is HasilLogin.Sukses)
         assertEquals(Role.ADMIN, (hasil as HasilLogin.Sukses).sesi.role)
         assertEquals("admin", dao.get("admin@smkn2malinau.sch.id")?.role)
+    }
+
+    @Test
+    fun `login google - siswa - identitas jadi NIS dan siswa_id tertaut`() = runBlocking {
+        val dao = FakeAkunDao()
+        val api = FakeApi(GoogleLoginResponse(accessToken = "jwt", nama = "Budi", role = "siswa", email = "budi@sekolah.sch.id", nis = "22001"))
+        val hasil = repo(dao, api, resolveSiswaId = { nis -> if (nis == "22001") 7 else null })
+            .loginGoogle(fakeIdToken("budi@sekolah.sch.id", "Budi"))
+
+        assertTrue(hasil is HasilLogin.Sukses)
+        val sesi = (hasil as HasilLogin.Sukses).sesi
+        assertEquals(Role.SISWA, sesi.role)
+        assertEquals("22001", sesi.identitas)
+        assertEquals(7, sesi.siswaId)
+        assertEquals("siswa", dao.get("22001")?.role)
+    }
+
+    @Test
+    fun `login google - siswa - password NIS yang sudah ada tidak ditimpa`() = runBlocking {
+        val h = PasswordHasher.hash("sudahganti")
+        val dao = FakeAkunDao(AkunLokal("22001", "Budi", "siswa", h.hashB64, h.saltB64, siswa_id = 7, diperbarui_pada = "now"))
+        val api = FakeApi(GoogleLoginResponse(accessToken = "jwt", nama = "Budi", role = "siswa", email = "budi@sekolah.sch.id", nis = "22001"))
+        repo(dao, api, resolveSiswaId = { 7 }).loginGoogle(fakeIdToken("budi@sekolah.sch.id", "Budi"))
+
+        // Password lama (yang sudah diganti siswa sendiri) tetap berfungsi setelah login Google.
+        val hasil = repo(dao).loginPassword("22001", "sudahganti")
+        assertTrue(hasil is HasilLogin.Sukses)
+    }
+
+    @Test
+    fun `login google - siswa tanpa nis dari server - gagal`() = runBlocking {
+        val dao = FakeAkunDao()
+        val api = FakeApi(GoogleLoginResponse(accessToken = "jwt", nama = "Budi", role = "siswa", email = "budi@sekolah.sch.id", nis = null))
+        val hasil = repo(dao, api).loginGoogle(fakeIdToken("budi@sekolah.sch.id", "Budi"))
+        assertTrue(hasil is HasilLogin.Gagal)
     }
 
     @Test

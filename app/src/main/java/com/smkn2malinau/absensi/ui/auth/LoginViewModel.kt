@@ -111,7 +111,10 @@ class LoginViewModel(
             val db = AbsensiDatabase.getDatabase(appContext, cm.getDbPassphrase())
             val api = ApiClientProvider.createForRegistration(cm.getServerBaseUrl())
             return LoginViewModel(
-                auth = AuthRepository(db.akunDao(), cm, api),
+                auth = AuthRepository(
+                    db.akunDao(), cm, api,
+                    resolveSiswaId = { nis -> db.siswaDao().getSemuaSiswa().firstOrNull { it.nis == nis }?.siswa_id },
+                ),
                 googleProvider = GoogleIdTokenProvider(activityContext),
             ) as T
         }

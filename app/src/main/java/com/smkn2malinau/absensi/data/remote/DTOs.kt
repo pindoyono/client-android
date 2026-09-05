@@ -163,7 +163,9 @@ data class GoogleLoginResponse(
     @SerializedName("access_token") val accessToken: String,
     @SerializedName("nama") val nama: String? = null,
     @SerializedName("role") val role: String? = null,
-    @SerializedName("email") val email: String? = null
+    @SerializedName("email") val email: String? = null,
+    /** Cuma terisi kalau role == "siswa" — dipakai mencocokkan ke siswa_cache lokal (bukan email). */
+    @SerializedName("nis") val nis: String? = null,
 )
 
 data class DeviceRegisterRequest(

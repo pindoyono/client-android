@@ -56,7 +56,7 @@ fun LoginScreen(
 
                 if (state.belumAdaAkun && !state.butuhBuatPassword) {
                     Text(
-                        "Belum ada akun di device ini. Role admin/guru ditentukan server — " +
+                        "Belum ada akun di device ini. Role ditentukan server — " +
                             "login Google (online) dulu minimal sekali.",
                         style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkMuted,
                     )
