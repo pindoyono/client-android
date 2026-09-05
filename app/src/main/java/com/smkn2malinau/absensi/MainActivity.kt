@@ -107,6 +107,26 @@ private fun KioskRoot(onOpenAdmin: () -> Unit) {
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasCameraPermission = granted }
 
+    // Geofencing (opt-in per device, lihat location/LocationChecker.kt) butuh izin
+    // lokasi supaya SyncService bisa benar-benar cek posisi kiosk. Sebelumnya
+    // hanya dicek pasif (checkSelfPermission) tanpa pernah diminta di layar
+    // kiosk — kalau belum pernah diberikan, kiosk terus dianggap "lokasi tidak
+    // tersedia" (fail-closed) selamanya tanpa admin pernah melihat dialog izin.
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val lokasiPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasLocationPermission = granted
+        // Begitu izin baru diberikan, langsung picu cek lokasi — jangan tunggu
+        // siklus sync periodik (bisa sampai 15 menit) untuk membuka blokir kiosk.
+        if (granted) SyncWorker.enqueueSekali(context, paksa = true)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.refreshModeTesting()
         // Picu satu siklus sync saat kiosk dibuka supaya status "tersinkron"
@@ -114,6 +134,9 @@ private fun KioskRoot(onOpenAdmin: () -> Unit) {
         SyncWorker.enqueueSekali(context)
         if (!hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+        if (!hasLocationPermission) {
+            lokasiPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
