@@ -182,16 +182,16 @@ class SyncServiceTest {
     @Test
     fun `hasil cek lokasi disimpan lewat callback`() = runTest {
         val repo = FakeSyncRepo()
-        val api = FakeApi(lokasiCekResponse = LokasiCekResponse(valid = false, alasan = "di luar radius"))
-        var statusTersimpan: Pair<Boolean, String>? = null
+        val api = FakeApi(lokasiCekResponse = LokasiCekResponse(valid = false, alasan = "di luar radius", jarakMeter = 512.3))
+        var statusTersimpan: Triple<Boolean, String, Double?>? = null
 
         SyncService(
             repo, api, "d",
             locationChecker = FakeLocationChecker(HasilLokasi(tersedia = true, lat = -3.4, lng = 116.4)),
-            simpanStatusLokasi = { valid, alasan -> statusTersimpan = valid to alasan },
+            simpanStatusLokasi = { valid, alasan, jarak -> statusTersimpan = Triple(valid, alasan, jarak) },
         ).runSyncCycle()
 
-        assertEquals(false to "di luar radius", statusTersimpan)
+        assertEquals(Triple(false, "di luar radius", 512.3), statusTersimpan)
         assertEquals(true, api.lastLokasiCekRequest?.tersedia)
         assertEquals(-3.4, api.lastLokasiCekRequest?.lat)
     }
@@ -205,7 +205,7 @@ class SyncServiceTest {
         val result = SyncService(
             repo, api, "d",
             locationChecker = FakeLocationChecker(HasilLokasi(tersedia = false)),
-            simpanStatusLokasi = { _, _ -> dipanggil = true },
+            simpanStatusLokasi = { _, _, _ -> dipanggil = true },
         ).runSyncCycle()
 
         assertTrue(result is SyncResult.Success)

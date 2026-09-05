@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.smkn2malinau.absensi.ui.theme.AbsensiColors
 import com.smkn2malinau.absensi.ui.theme.PaletHasil
@@ -50,6 +51,8 @@ data class KioskUiState(
     /** Geofencing (opt-in per device) — false = kiosk diblokir total, lihat KartuLokasiTidakValid. */
     val lokasiValid: Boolean = true,
     val lokasiAlasan: String? = null,
+    /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur. */
+    val lokasiJarakMeter: Double? = null,
 )
 
 /** Baris "Sync: 04/09 00:19 · 0 antre, 128 wajah, 11 jadwal". */
@@ -166,6 +169,7 @@ fun KioskScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
     Column(
@@ -203,13 +207,15 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
             Text(
                 text = "Sync: ${r.waktuTeks} · ${r.antreKirim} antre, ${r.jumlahWajah} wajah, ${r.jumlahJadwal} jadwal",
                 color = AbsensiColors.InkMuted,
-                style = MaterialTheme.typography.labelMedium
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
-        Row(
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(Spasi.sm),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(Spasi.xs),
         ) {
             ChipJadwal(state.jadwalMasuk, state.jadwalPulang)
             when (state.kesegaran) {
@@ -222,15 +228,21 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit) {
                     )
                 KesegaranUi.TIDAK_DIKETAHUI -> Unit
             }
-        }
-
-        if (!state.onSiteTestingSelesai) {
-            Row {
+            state.lokasiJarakMeter?.let { jarak ->
+                val warna = if (state.lokasiValid) AbsensiColors.SuksesTeks else AbsensiColors.BahayaTeks
+                val latar = if (state.lokasiValid) AbsensiColors.SuksesBg else AbsensiColors.BahayaBg
+                ChipInfo("📍 ${formatJarak(jarak)} dari lokasi", warna, latar)
+            }
+            if (!state.onSiteTestingSelesai) {
                 ChipInfo("MODE TESTING · TIDAK DISIMPAN", AbsensiColors.WarningTeks, AbsensiColors.WarningBg)
             }
         }
     }
 }
+
+/** "12m" untuk jarak &lt; 1km, "1.2km" di atasnya — chip geofencing di header. */
+private fun formatJarak(meter: Double): String =
+    if (meter < 1000) "${meter.toInt()}m" else "%.1fkm".format(meter / 1000)
 
 @Composable
 private fun ChipJadwal(masuk: String?, pulang: String?) {

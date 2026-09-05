@@ -44,6 +44,7 @@ class KioskViewModelFactory(context: Context) : ViewModelProvider.Factory {
             muatModel = { faceEngine.loadModels(LIVENESS_MODEL, EMBEDDING_MODEL) },
             lokasiValidProvider = { credentialManager.lokasiValid() },
             lokasiAlasanProvider = { credentialManager.lokasiAlasan() },
+            lokasiJarakProvider = { credentialManager.lokasiJarakMeter() },
         ) as T
     }
 }

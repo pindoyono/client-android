@@ -47,6 +47,7 @@ class KioskViewModel(
     /** Geofencing (opt-in per device) — hasil cek terakhir dari SyncService, lihat CredentialManager. */
     private val lokasiValidProvider: () -> Boolean = { true },
     private val lokasiAlasanProvider: () -> String? = { null },
+    private val lokasiJarakProvider: () -> Double? = { null },
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -54,6 +55,7 @@ class KioskViewModel(
             onSiteTestingSelesai = onSiteTestingSelesai(),
             lokasiValid = lokasiValidProvider(),
             lokasiAlasan = lokasiAlasanProvider(),
+            lokasiJarakMeter = lokasiJarakProvider(),
         )
     )
     val uiState: StateFlow<KioskUiState> = _uiState.asStateFlow()
@@ -108,7 +110,13 @@ class KioskViewModel(
                     .getOrNull()
                     ?.let { r -> _uiState.update { it.terapkanRingkasan(r) } }
                 // Geofencing — baca status cek terakhir (ditulis SyncService secara berkala).
-                _uiState.update { it.copy(lokasiValid = lokasiValidProvider(), lokasiAlasan = lokasiAlasanProvider()) }
+                _uiState.update {
+                    it.copy(
+                        lokasiValid = lokasiValidProvider(),
+                        lokasiAlasan = lokasiAlasanProvider(),
+                        lokasiJarakMeter = lokasiJarakProvider(),
+                    )
+                }
                 delay(RINGKASAN_REFRESH_MS)
             }
         }

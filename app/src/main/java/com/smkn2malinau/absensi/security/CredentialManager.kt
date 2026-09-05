@@ -30,6 +30,7 @@ class CredentialManager(context: Context) {
     private val PREF_ON_SITE_TESTING = "ON_SITE_TESTING_SELESAI"
     private val PREF_LOKASI_VALID = "lokasi_valid_terakhir"
     private val PREF_LOKASI_ALASAN = "lokasi_alasan_terakhir"
+    private val PREF_LOKASI_JARAK = "lokasi_jarak_meter_terakhir"
     private val PREF_NAMA_LOKASI = "nama_lokasi"
     private val PREF_ADMIN_NAMA = "admin_nama"
     private val PREF_ADMIN_ROLE = "admin_role"
@@ -265,12 +266,18 @@ class CredentialManager(context: Context) {
      * mengatur lokasi device ini) supaya tidak memblokir kiosk yang belum
      * di-setup geofencing-nya.
      */
-    fun setStatusLokasi(valid: Boolean, alasan: String) {
-        prefs.edit().putBoolean(PREF_LOKASI_VALID, valid).putString(PREF_LOKASI_ALASAN, alasan).apply()
+    fun setStatusLokasi(valid: Boolean, alasan: String, jarakMeter: Double? = null) {
+        val editor = prefs.edit().putBoolean(PREF_LOKASI_VALID, valid).putString(PREF_LOKASI_ALASAN, alasan)
+        if (jarakMeter != null) editor.putFloat(PREF_LOKASI_JARAK, jarakMeter.toFloat())
+        else editor.remove(PREF_LOKASI_JARAK)
+        editor.apply()
     }
 
     fun lokasiValid(): Boolean = prefs.getBoolean(PREF_LOKASI_VALID, true)
     fun lokasiAlasan(): String? = prefs.getString(PREF_LOKASI_ALASAN, null)
+    /** Jarak (meter) ke titik acuan server saat pengecekan terakhir — null = lokasi belum diatur di server. */
+    fun lokasiJarakMeter(): Double? =
+        if (prefs.contains(PREF_LOKASI_JARAK)) prefs.getFloat(PREF_LOKASI_JARAK, 0f).toDouble() else null
 
     private fun generateDefaultPassphrase(): ByteArray {
         val pass = "absensi_smkn2_malinau_2024_secure_db"
