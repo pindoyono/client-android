@@ -4,9 +4,11 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
@@ -15,6 +17,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +26,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +56,10 @@ data class KioskUiState(
     val jadwalPulang: String? = null,
     /** Jadwal di header berasal dari override (bukan jadwal standar). */
     val jadwalOverride: Boolean = false,
+    /** Opsi jadwal per kelas (dropdown header). Kosong / 1 entri = tanpa dropdown. */
+    val jadwalOpsiKelas: List<JadwalOpsiKelasUi> = emptyList(),
+    /** Kelas yang sedang dipilih di dropdown header. "" = Umum (default). */
+    val jadwalKelasDipilih: String = "",
     val kesegaran: KesegaranUi = KesegaranUi.TIDAK_DIKETAHUI,
     val dataBasi: List<String> = emptyList(),
     /** Baris "Nama · Masuk/Pulang · keterangan" dari 5 absensi terakhir — daftar persisten di kiosk. */
@@ -77,6 +88,15 @@ data class RingkasanSyncUi(
 )
 
 enum class KesegaranUi { SEGAR, BASI, TIDAK_DIKETAHUI }
+
+/** Opsi di dropdown pemilih kelas pada header kiosk. */
+data class JadwalOpsiKelasUi(
+    val kelas: String,       // "" = umum
+    val label: String,       // "Umum" atau nama kelas
+    val jamMasuk: String,    // "07:00"
+    val jamPulang: String,   // "15:00"
+    val override: Boolean,
+)
 
 /**
  * Status pil kiri-atas. Ditentukan gabungan jaringan + hasil siklus sync terakhir
@@ -118,6 +138,7 @@ fun KioskScreen(
     kameraSiap: Boolean = true,
     onOpenAdmin: () -> Unit = {},
     onSyncSekarang: () -> Unit = {},
+    onPilihJadwalKelas: (String) -> Unit = {},
     cameraContent: @Composable () -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize().background(AbsensiColors.Bg)) {
@@ -138,7 +159,7 @@ fun KioskScreen(
         )
 
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            BarisAtas(state, onOpenAdmin, onSyncSekarang)
+            BarisAtas(state, onOpenAdmin, onSyncSekarang, onPilihJadwalKelas)
 
             if (!state.lokasiValid) {
                 Box(
@@ -188,7 +209,12 @@ fun KioskScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekarang: () -> Unit) {
+private fun BarisAtas(
+    state: KioskUiState,
+    onOpenAdmin: () -> Unit,
+    onSyncSekarang: () -> Unit,
+    onPilihJadwalKelas: (String) -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -257,7 +283,14 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekara
             horizontalArrangement = Arrangement.spacedBy(Spasi.sm),
             verticalArrangement = Arrangement.spacedBy(Spasi.xs),
         ) {
-            ChipJadwal(state.jadwalMasuk, state.jadwalPulang, state.jadwalOverride)
+            ChipJadwal(
+                masuk = state.jadwalMasuk,
+                pulang = state.jadwalPulang,
+                dariOverride = state.jadwalOverride,
+                opsiKelas = state.jadwalOpsiKelas,
+                kelasDipilih = state.jadwalKelasDipilih,
+                onPilihKelas = onPilihJadwalKelas,
+            )
             when (state.kesegaran) {
                 KesegaranUi.SEGAR ->
                     ChipInfo("✓ Data segar", AbsensiColors.SuksesTeks, AbsensiColors.SuksesBg)
@@ -285,23 +318,60 @@ private fun formatJarak(meter: Double): String =
     if (meter < 1000) "${meter.toInt()}m" else "%.1fkm".format(meter / 1000)
 
 @Composable
-private fun ChipJadwal(masuk: String?, pulang: String?, dariOverride: Boolean = false) {
+private fun ChipJadwal(
+    masuk: String?,
+    pulang: String?,
+    dariOverride: Boolean = false,
+    opsiKelas: List<JadwalOpsiKelasUi> = emptyList(),
+    kelasDipilih: String = "",
+    onPilihKelas: (String) -> Unit = {},
+) {
     val warna = if (dariOverride) AbsensiColors.WarningTeks else AbsensiColors.Border
+    val warnaTeks = if (dariOverride) AbsensiColors.WarningTeks else AbsensiColors.Ink
+    // Dropdown hanya bila ada > 1 jadwal (mis. jadwal khusus per kelas).
+    val adaDropdown = opsiKelas.size > 1
+    var menuTerbuka by remember { mutableStateOf(false) }
+    val labelKelas = opsiKelas.firstOrNull { it.kelas == kelasDipilih }?.label
+        ?: opsiKelas.firstOrNull()?.label ?: "Umum"
+
     Surface(
         color = AbsensiColors.Surface2,
         contentColor = AbsensiColors.Ink,
         shape = MaterialTheme.shapes.small,
         border = androidx.compose.foundation.BorderStroke(1.dp, warna)
     ) {
-        Text(
-            text = buildString {
-                append("Masuk: ${masuk ?: "--:--"}   Pulang: ${pulang ?: "--:--"}")
-                if (dariOverride) append("  · override")
-            },
-            style = MaterialTheme.typography.labelLarge,
-            color = if (dariOverride) AbsensiColors.WarningTeks else AbsensiColors.Ink,
-            modifier = Modifier.padding(horizontal = Spasi.md, vertical = 6.dp)
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .then(if (adaDropdown) Modifier.clickable { menuTerbuka = true } else Modifier)
+                .padding(horizontal = Spasi.md, vertical = 6.dp),
+        ) {
+            Text(
+                text = buildString {
+                    append("Masuk: ${masuk ?: "--:--"}   Pulang: ${pulang ?: "--:--"}")
+                    if (dariOverride) append("  · override")
+                    if (adaDropdown) append("  · $labelKelas")
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = warnaTeks,
+            )
+            if (adaDropdown) {
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = "Pilih kelas",
+                    tint = warnaTeks,
+                    modifier = Modifier.size(18.dp),
+                )
+                DropdownMenu(expanded = menuTerbuka, onDismissRequest = { menuTerbuka = false }) {
+                    opsiKelas.forEach { o ->
+                        DropdownMenuItem(
+                            text = { Text("${o.label} — ${o.jamMasuk}/${o.jamPulang}") },
+                            onClick = { onPilihKelas(o.kelas); menuTerbuka = false },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

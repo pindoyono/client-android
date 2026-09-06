@@ -179,6 +179,20 @@ class KioskViewModel(
 
     private fun KioskUiState.terapkanRingkasan(r: RingkasanKiosk): KioskUiState {
         sinkronTerakhirSukses = r.sinkronTerakhirSukses
+        val opsi = r.jadwalOpsiKelas.map {
+            JadwalOpsiKelasUi(
+                kelas = it.kelas,
+                label = if (it.kelas.isBlank()) "Umum" else it.kelas,
+                jamMasuk = it.jamMasuk.format(JAM_FMT),
+                jamPulang = it.jamPulang.format(JAM_FMT),
+                override = it.dariOverride,
+            )
+        }
+        // Pertahankan pilihan kelas bila masih ada di opsi terbaru; kalau tidak,
+        // jatuh ke opsi pertama (umum) atau string kosong.
+        val kelasDipilih = jadwalKelasDipilih.takeIf { sel -> opsi.any { it.kelas == sel } }
+            ?: opsi.firstOrNull()?.kelas ?: ""
+        val terpilih = opsi.firstOrNull { it.kelas == kelasDipilih }
         return copy(
             statusJaringan = hitungStatusJaringan(),
             ringkasanSync = RingkasanSyncUi(
@@ -187,9 +201,11 @@ class KioskViewModel(
                 jumlahWajah = r.jumlahWajah,
                 jumlahJadwal = r.jumlahJadwal,
             ),
-            jadwalMasuk = r.jadwalHariIni?.jamMasuk?.format(JAM_FMT),
-            jadwalPulang = r.jadwalHariIni?.jamPulang?.format(JAM_FMT),
-            jadwalOverride = r.jadwalOverride,
+            jadwalMasuk = terpilih?.jamMasuk ?: r.jadwalHariIni?.jamMasuk?.format(JAM_FMT),
+            jadwalPulang = terpilih?.jamPulang ?: r.jadwalHariIni?.jamPulang?.format(JAM_FMT),
+            jadwalOverride = terpilih?.override ?: r.jadwalOverride,
+            jadwalOpsiKelas = opsi,
+            jadwalKelasDipilih = kelasDipilih,
             kesegaran = when {
                 !r.kesegaran.diketahui -> KesegaranUi.TIDAK_DIKETAHUI
                 r.kesegaran.segar -> KesegaranUi.SEGAR
@@ -212,6 +228,17 @@ class KioskViewModel(
 
     fun refreshModeTesting() {
         _uiState.update { it.copy(onSiteTestingSelesai = onSiteTestingSelesai()) }
+    }
+
+    /** Pilih kelas di dropdown header — ubah jam masuk/pulang yang ditampilkan. */
+    fun pilihJadwalKelas(kelas: String) = _uiState.update { st ->
+        val opsi = st.jadwalOpsiKelas.firstOrNull { it.kelas == kelas } ?: return@update st
+        st.copy(
+            jadwalKelasDipilih = kelas,
+            jadwalMasuk = opsi.jamMasuk,
+            jadwalPulang = opsi.jamPulang,
+            jadwalOverride = opsi.override,
+        )
     }
 
     /** Tombol sync manual di header kiosk — hasilnya lihat observer WorkInfo di init. */

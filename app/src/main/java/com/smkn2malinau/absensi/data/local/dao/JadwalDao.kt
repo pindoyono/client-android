@@ -63,6 +63,13 @@ interface JadwalDao {
     @Query("SELECT * FROM jadwal_cache WHERE tanggal = :tanggal ORDER BY (sumber = 'override') DESC, kelas LIMIT 1")
     suspend fun getJadwalHariIni(tanggal: String): JadwalCache?
 
+    /**
+     * Semua jadwal (per kelas + umum) untuk tanggal tertentu — mengisi dropdown
+     * pemilih kelas di header kiosk. Kelas "" = jadwal umum, diurutkan paling atas.
+     */
+    @Query("SELECT * FROM jadwal_cache WHERE tanggal = :tanggal ORDER BY kelas")
+    suspend fun getJadwalHariIniSemua(tanggal: String): List<JadwalCache>
+
     /** Ganti seluruh cache jadwal (setara `replace_jadwal_cache` di client Windows). */
     @Query("DELETE FROM jadwal_cache")
     suspend fun hapusSemuaJadwalCache()

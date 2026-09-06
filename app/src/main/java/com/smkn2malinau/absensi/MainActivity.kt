@@ -144,7 +144,8 @@ private fun KioskRoot(onOpenAdmin: () -> Unit) {
         state = state,
         kameraSiap = hasCameraPermission,
         onOpenAdmin = onOpenAdmin,
-        onSyncSekarang = viewModel::syncSekarang
+        onSyncSekarang = viewModel::syncSekarang,
+        onPilihJadwalKelas = viewModel::pilihJadwalKelas,
     ) {
         if (hasCameraPermission) {
             CameraView(

@@ -8,6 +8,7 @@ import com.smkn2malinau.absensi.face.FaceEngine
 import com.smkn2malinau.absensi.face.HasilDeteksiWajah
 import com.smkn2malinau.absensi.face.LivenessResult
 import com.smkn2malinau.absensi.repository.AbsensiRepository
+import com.smkn2malinau.absensi.repository.JadwalOpsiKelas
 import com.smkn2malinau.absensi.repository.SiswaCocok
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -110,6 +111,33 @@ class KioskViewModelTest {
         // wajah tetap dikenali (nama & status tetap muncul)
         assertEquals("Budi", vm.uiState.value.hasilTerakhir?.nama)
         assertEquals(StatusHasil.BERHASIL_TEPAT_WAKTU, vm.uiState.value.hasilTerakhir?.status)
+    }
+
+    @Test
+    fun `header jadwal - pilih kelas di dropdown mengubah jam masuk pulang`() = runVmTest {
+        val opsi = listOf(
+            JadwalOpsiKelas("", LocalTime.of(7, 0), LocalTime.of(15, 0), false),
+            JadwalOpsiKelas("XI A", LocalTime.of(7, 0), LocalTime.of(12, 0), false),
+        )
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar, opsiKelas = opsi)
+        val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true)
+        advanceTimeBy(2) // biarkan loop ringkasan jalan sekali
+
+        // default: jadwal umum
+        assertEquals("", vm.uiState.value.jadwalKelasDipilih)
+        assertEquals("15:00", vm.uiState.value.jadwalPulang)
+        assertEquals(2, vm.uiState.value.jadwalOpsiKelas.size)
+
+        // pilih kelas XI A → jam pulang ikut kelas
+        vm.pilihJadwalKelas("XI A")
+        assertEquals("XI A", vm.uiState.value.jadwalKelasDipilih)
+        assertEquals("12:00", vm.uiState.value.jadwalPulang)
+        assertEquals("07:00", vm.uiState.value.jadwalMasuk)
+
+        // refresh ringkasan berikutnya tidak mereset pilihan
+        advanceTimeBy(20_000)
+        assertEquals("XI A", vm.uiState.value.jadwalKelasDipilih)
+        assertEquals("12:00", vm.uiState.value.jadwalPulang)
     }
 
     @Test
@@ -287,6 +315,7 @@ class KioskViewModelTest {
         private val dispensasi: DispensasiCache? = null,
         private val simpanBerhasil: Boolean = true,
         private val sinkronSukses: Boolean = false,
+        private val opsiKelas: List<JadwalOpsiKelas> = emptyList(),
     ) : AbsensiRepository {
         val disimpan = mutableListOf<Disimpan>()
 
@@ -304,6 +333,7 @@ class KioskViewModelTest {
 
         override suspend fun ringkasanKiosk(tanggal: String) = com.smkn2malinau.absensi.repository.RingkasanKiosk(
             jadwalHariIni = jadwal,
+            jadwalOpsiKelas = opsiKelas,
             sinkronTerakhirSukses = sinkronSukses,
             pernahSinkron = true,
         )
