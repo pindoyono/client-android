@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.EmbeddingCache
 import com.smkn2malinau.absensi.data.local.entity.SiswaCache
+import com.smkn2malinau.absensi.data.remote.ApiService
+import com.smkn2malinau.absensi.data.remote.EnrollWajahRequest
 import com.smkn2malinau.absensi.face.CryptoEmbedding
 import com.smkn2malinau.absensi.face.FaceEngine
 import kotlinx.coroutines.Dispatchers
@@ -23,11 +25,15 @@ import java.time.LocalDateTime
  *
  * Data siswa DIAMBIL DARI SERVER — daftar `siswa_cache` yang sudah ditarik
  * `SyncWorker` (`GET /embeddings/sync`). Operator tinggal cari nama/NIS lalu
- * pilih; embedding disimpan terhadap `siswa_id` server yang asli, jadi saat
- * sync berikutnya versi server (bila ada) menimpa bersih via PK.
+ * pilih.
  *
  * Alur: cari & pilih siswa → ambil frame kamera → liveness → ArcFace embedding
- * → enkripsi AES → simpan ke `embedding_cache`.
+ * → (1) enkripsi AES + simpan ke `embedding_cache` lokal, (2) **PUSH embedding
+ * mentah ke `POST /siswa/{id}/enroll`** supaya permanen di server.
+ *
+ * Kenapa (2) wajib: `GET /embeddings/sync` melakukan REPLACE by `siswa_id`,
+ * jadi kalau embedding baru tidak di-push, siklus sync berikutnya akan
+ * menimpanya dengan embedding LAMA dari server dan absensi wajah baru gagal.
  */
 data class EnrollmentUiState(
     val query: String = "",
@@ -47,6 +53,8 @@ class EnrollmentViewModel(
     private val db: AbsensiDatabase,
     /** Fernet key embedding — HARUS sama dengan server (`FACE_ENCRYPTION_KEY`). */
     private val faceKey: String,
+    /** Client device-auth untuk push embedding ke server (null = belum terdaftar). */
+    private val apiProvider: () -> ApiService? = { null },
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(EnrollmentUiState())
@@ -137,7 +145,7 @@ class EnrollmentViewModel(
                         EmbeddingCache(
                             siswa_id = siswa.siswa_id,
                             embedding_encrypted = encrypted,
-                            model_version = "arcface-local",
+                            model_version = MODEL_VERSION,
                             diperbarui_pada = LocalDateTime.now().toString(),
                         )
                     )
@@ -147,12 +155,32 @@ class EnrollmentViewModel(
             gagal("Key wajah tidak valid: ${e.message}")
             return
         }
+
+        // Push ke server supaya PERMANEN. Tanpa ini, embedding lokal akan
+        // tertimpa embedding lama dari server pada siklus sync berikutnya
+        // (GET /embeddings/sync REPLACE by siswa_id).
+        val pushErr: String? = if (siswa.siswa_id <= 0) {
+            "siswa lokal — tidak ada di server"
+        } else {
+            val api = apiProvider()
+            if (api == null) "device belum terdaftar"
+            else withContext(Dispatchers.IO) {
+                runCatching {
+                    api.enrollWajah(siswa.siswa_id, EnrollWajahRequest(embedding.toList(), MODEL_VERSION))
+                }.exceptionOrNull()?.let { it.message ?: it.javaClass.simpleName }
+            }
+        }
+
         _uiState.update {
             it.copy(
                 sedangProses = false,
                 sukses = true,
-                pesanError = false,
-                pesan = "Wajah ${siswa.nama} (${siswa.nis}) terdaftar. Siap absen.",
+                pesanError = pushErr != null,
+                pesan = if (pushErr == null)
+                    "Wajah ${siswa.nama} (${siswa.nis}) terdaftar & tersimpan di server. Siap absen."
+                else
+                    "Wajah ${siswa.nama} tersimpan LOKAL tapi GAGAL ke server ($pushErr). " +
+                        "Data ini bisa tertimpa saat sync — hubungkan internet lalu daftar ulang.",
                 sudahEnroll = it.sudahEnroll + siswa.siswa_id,
             )
         }
@@ -166,16 +194,18 @@ class EnrollmentViewModel(
         private val faceEngine: FaceEngine,
         private val db: AbsensiDatabase,
         private val faceKey: String,
+        private val apiProvider: () -> ApiService? = { null },
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(EnrollmentViewModel::class.java))
-            return EnrollmentViewModel(faceEngine, db, faceKey) as T
+            return EnrollmentViewModel(faceEngine, db, faceKey, apiProvider) as T
         }
     }
 
     companion object {
         private const val MAKS_HASIL = 40
+        private const val MODEL_VERSION = "arcface-android"
 
         /**
          * ID untuk enroll LOKAL — selalu negatif, terpisah dari `siswa_id` server (positif).

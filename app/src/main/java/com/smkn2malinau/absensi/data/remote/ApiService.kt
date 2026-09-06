@@ -58,6 +58,11 @@ interface ApiService {
         @Query("enrolled") enrolled: Boolean? = null,
     ): List<SiswaRosterDto>
 
+    // 8b. Enroll / re-enroll wajah siswa dari kiosk (device-auth). Menimpa embedding
+    //     lama di server → GET /embeddings/sync berikutnya membawa versi baru.
+    @POST("siswa/{id}/enroll")
+    suspend fun enrollWajah(@Path("id") siswaId: Int, @Body request: EnrollWajahRequest)
+
     // 9. Cek geofencing — dipanggil berkala (bukan per-scan), lihat KioskViewModel.
     @POST("device/{id}/lokasi/cek")
     suspend fun cekLokasi(

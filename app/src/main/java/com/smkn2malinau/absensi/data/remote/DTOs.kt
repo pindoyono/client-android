@@ -222,6 +222,14 @@ data class DeviceRegisterResponse(
             ?: deviceApiKey?.takeIf { it.isNotBlank() }
 }
 
+// --- Enroll wajah dari kiosk — POST /siswa/{id}/enroll (device-auth) ---
+
+data class EnrollWajahRequest(
+    /** Embedding ArcFace MENTAH (belum dienkripsi) — server yang mengenkripsi. */
+    @SerializedName("embedding") val embedding: List<Float>,
+    @SerializedName("model_version") val modelVersion: String,
+)
+
 // --- Provisioning via QR — POST /device/claim ---
 
 data class DeviceClaimRequest(

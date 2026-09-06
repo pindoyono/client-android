@@ -58,7 +58,13 @@ fun EnrollmentScreen(
         }
     }
     val viewModel: EnrollmentViewModel = viewModel(
-        factory = EnrollmentViewModel.Factory(faceEngine, db, credentialManager.getFaceKey())
+        factory = EnrollmentViewModel.Factory(faceEngine, db, credentialManager.getFaceKey()) {
+            val id = credentialManager.getDeviceId()
+            val key = credentialManager.getApiKey()
+            if (id != null && key != null)
+                com.smkn2malinau.absensi.data.remote.ApiClientProvider.create(id, key, credentialManager.getServerBaseUrl())
+            else null
+        }
     )
     val state by viewModel.uiState.collectAsState()
     val latestFrame = remember { mutableStateOf<ByteArray?>(null) }

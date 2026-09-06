@@ -403,6 +403,7 @@ class SyncServiceTest {
         override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = HealthReportResponse("ok")
         override suspend fun getRoster() = rosterResponse
         override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = siswaRosterResponse
+        override suspend fun enrollWajah(siswaId: Int, request: EnrollWajahRequest) {}
         var lastLokasiCekRequest: LokasiCekRequest? = null
         override suspend fun cekLokasi(deviceId: String, request: LokasiCekRequest): LokasiCekResponse {
             if (throwOnLokasiCek) throw RuntimeException("boom")
