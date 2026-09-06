@@ -51,6 +51,20 @@ android {
             "String", "FACE_ENCRYPTION_KEY",
             "\"${localOrDefault("FACE_ENCRYPTION_KEY", "")}\""
         )
+        // Akun admin OFFLINE default — di-seed sekali saat aplikasi start bila
+        // BELUM ada akun lokal sama sekali (break-glass saat server/Google tak
+        // terjangkau). Isi di local.properties (TIDAK di-commit):
+        //   DEFAULT_ADMIN_USER=namauser
+        //   DEFAULT_ADMIN_PASS=passwordkuat
+        // Kosong = tidak ada akun default (perilaku lama: setup manual).
+        buildConfigField(
+            "String", "DEFAULT_ADMIN_USER",
+            "\"${localOrDefault("DEFAULT_ADMIN_USER", "")}\""
+        )
+        buildConfigField(
+            "String", "DEFAULT_ADMIN_PASS",
+            "\"${localOrDefault("DEFAULT_ADMIN_PASS", "")}\""
+        )
     }
 
     buildTypes {
