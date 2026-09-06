@@ -321,6 +321,28 @@ class SyncServiceTest {
     }
 
     @Test
+    fun `nama_lokasi dari response health disimpan`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(healthNamaLokasi = "Gerbang Belakang")
+        var namaTersimpan: String? = null
+
+        SyncService(repo, api, "d", simpanNamaLokasi = { namaTersimpan = it }).runSyncCycle()
+
+        assertEquals("Gerbang Belakang", namaTersimpan)
+    }
+
+    @Test
+    fun `nama_lokasi kosong dari health tidak menimpa`() = runTest {
+        val repo = FakeSyncRepo()
+        val api = FakeApi(healthNamaLokasi = "   ")
+        var dipanggil = false
+
+        SyncService(repo, api, "d", simpanNamaLokasi = { dipanggil = true }).runSyncCycle()
+
+        assertEquals(false, dipanggil)
+    }
+
+    @Test
     fun `cek lokasi online berhasil - konfigurasi ikut di-cache untuk offline berikutnya`() = runTest {
         val repo = FakeSyncRepo()
         val api = FakeApi(
@@ -371,6 +393,7 @@ class SyncServiceTest {
         private val throwOnLokasiCek: Boolean = false,
         private val lokasiKonfigResponse: LokasiKonfigResponse = LokasiKonfigResponse(),
         private val throwOnLokasiKonfig: Boolean = false,
+        private val healthNamaLokasi: String? = null,
     ) : ApiService {
         var lastSyncRequest: SyncAbsensiRequest? = null
         var lastOverrideRequest: PushOverrideRequest? = null
@@ -400,7 +423,8 @@ class SyncServiceTest {
             lastOverrideRequest = request
             return pushResponse
         }
-        override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) = HealthReportResponse("ok")
+        override suspend fun reportHealth(deviceId: String, request: HealthReportRequest) =
+            HealthReportResponse(status = "ok", namaLokasi = healthNamaLokasi)
         override suspend fun getRoster() = rosterResponse
         override suspend fun getSiswaRoster(kelas: String?, enrolled: Boolean?) = siswaRosterResponse
         override suspend fun enrollWajah(siswaId: Int, request: EnrollWajahRequest) {}

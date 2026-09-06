@@ -56,6 +56,8 @@ class KioskViewModel(
     private val lokasiAlasanProvider: () -> String? = { null },
     private val lokasiJarakProvider: () -> Double? = { null },
     private val lokasiDikonfigurasiProvider: () -> Boolean = { false },
+    /** Nama lokasi kiosk (dari server, disegarkan tiap sync via /health). */
+    private val namaLokasiProvider: () -> String = { "" },
     /** true kalau cek geofencing terakhir mendeteksi lokasi mock (fake GPS) —
      *  distempel ke record absensi supaya server bisa menandainya. */
     private val lokasiMockProvider: () -> Boolean = { false },
@@ -72,6 +74,7 @@ class KioskViewModel(
             lokasiAlasan = lokasiAlasanProvider(),
             lokasiJarakMeter = lokasiJarakProvider(),
             lokasiDikonfigurasi = lokasiDikonfigurasiProvider(),
+            namaLokasi = namaLokasiProvider(),
         )
     )
     val uiState: StateFlow<KioskUiState> = _uiState.asStateFlow()
@@ -226,6 +229,7 @@ class KioskViewModel(
                 lokasiAlasan = lokasiAlasanProvider(),
                 lokasiJarakMeter = lokasiJarakProvider(),
                 lokasiDikonfigurasi = lokasiDikonfigurasiProvider(),
+                namaLokasi = namaLokasiProvider(),
             )
         }
     }

@@ -69,6 +69,8 @@ class SyncService(
     /** Cache titik acuan geofencing lokal — dipakai validasi offline (GeoOffline) saat POST /lokasi/cek tak terjangkau. */
     private val simpanKonfigLokasi: (lat: Double?, lng: Double?, radiusMeter: Int?) -> Unit = { _, _, _ -> },
     private val ambilKonfigLokasi: () -> KonfigLokasi = { KonfigLokasi(null, null, null) },
+    /** Nama lokasi terkini dari server (response /health) — disimpan ke CredentialManager. */
+    private val simpanNamaLokasi: (String) -> Unit = { },
 ) {
     private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 
@@ -261,10 +263,11 @@ class SyncService(
                 // server versi lama tak punya /auth/roster — abaikan.
             }
 
-            // --- 7. Lapor kesehatan device (best-effort) ---
+            // --- 7. Lapor kesehatan device (best-effort). Response membawa
+            // nama_lokasi terkini dari server — segarkan metadata lokal. ---
             try {
                 val k = repo.kesehatanCache()
-                api.reportHealth(
+                val h = api.reportHealth(
                     deviceId,
                     HealthReportRequest(
                         jadwalJamLalu = k.jadwalJamLalu,
@@ -274,6 +277,7 @@ class SyncService(
                         appVersion = com.smkn2malinau.absensi.BuildConfig.VERSION_NAME,
                     )
                 )
+                h.namaLokasi?.trim()?.takeIf { it.isNotEmpty() }?.let(simpanNamaLokasi)
             } catch (e: Exception) {
             }
 

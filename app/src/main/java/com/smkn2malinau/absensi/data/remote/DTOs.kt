@@ -141,6 +141,9 @@ data class HealthReportRequest(
 data class HealthReportResponse(
     @SerializedName("status") val status: String? = null,
     @SerializedName("server_time") val serverTime: String? = null,
+    /** Nilai TERKINI di server — kiosk pakai untuk menyegarkan metadata lokal tiap sync. */
+    @SerializedName("nama_lokasi") val namaLokasi: String? = null,
+    @SerializedName("platform") val platform: String? = null,
 )
 
 // --- Geofencing — POST /device/{id}/lokasi/cek ---

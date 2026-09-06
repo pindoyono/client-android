@@ -64,6 +64,8 @@ data class KioskUiState(
     val sedangSync: Boolean = false,
     /** Instruksi anti-spoof yang sedang aktif ("Kedipkan mata", "Verifikasi wajah…") — null = tak ada. */
     val instruksiLiveness: String? = null,
+    /** Nama lokasi kiosk (dari server, disegarkan tiap sync). "" = belum diketahui. */
+    val namaLokasi: String = "",
 )
 
 /** Baris "Sync: 04/09 00:19 · 0 antre, 128 wajah, 11 jadwal". */
@@ -218,6 +220,16 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekara
                     tint = if (state.lokasiDikonfigurasi) AbsensiColors.SuksesTeks else AbsensiColors.InkMuted,
                     modifier = Modifier.padding(start = 4.dp).size(16.dp),
                 )
+                if (state.namaLokasi.isNotBlank()) {
+                    Text(
+                        text = state.namaLokasi,
+                        color = AbsensiColors.InkSoft,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 4.dp).widthIn(max = 140.dp),
+                    )
+                }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
