@@ -185,11 +185,7 @@ class AdminViewModel(
                     onSelesai()
                 }
                 .onFailure {
-                    selesaiError(
-                        if (it is HttpException && it.code() == 404)
-                            "QR sudah kedaluwarsa atau terpakai. Minta admin membuat QR baru di dashboard."
-                        else "Gagal klaim QR: ${it.message ?: it.javaClass.simpleName}"
-                    )
+                    selesaiError(pesanGagalKlaim(it))
                 }
         }
     }
@@ -234,6 +230,22 @@ class AdminViewModel(
 
     private fun selesaiError(msg: String) = _uiState.update {
         it.copy(sedangProses = false, pesan = msg, pesanError = true)
+    }
+
+    /** Bedakan "server belum punya endpoint /device/claim" vs "token invalid". */
+    private fun pesanGagalKlaim(e: Throwable): String {
+        if (e is HttpException) {
+            val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull().orEmpty()
+            return when {
+                e.code() == 404 && body.contains("Not Found", ignoreCase = true) && !body.contains("Token") ->
+                    "Server belum mendukung provisioning QR (endpoint /device/claim tidak ada). Update server dulu, atau pakai cara manual / Google."
+                e.code() == 404 ->
+                    "QR sudah kedaluwarsa atau terpakai. Minta admin membuat QR baru di dashboard."
+                e.code() == 400 -> "Token QR tidak valid."
+                else -> "Server menolak (HTTP ${e.code()})."
+            }
+        }
+        return "Gagal klaim QR: ${e.message ?: e.javaClass.simpleName}"
     }
 
     class Factory(context: Context) : ViewModelProvider.Factory {
