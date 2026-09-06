@@ -46,6 +46,18 @@ class LoginViewModel(
     fun onIdentitas(v: String) = _uiState.update { it.copy(identitas = v, pesan = null) }
     fun onPassword(v: String) = _uiState.update { it.copy(password = v, pesan = null) }
 
+    /**
+     * Kosongkan form. ViewModel ini hidup selama Activity, jadi tanpa reset
+     * eksplisit field email/NIS + password akan terisi lagi tiap layar login
+     * dibuka ulang (mis. setelah keluar dari Panel Admin).
+     */
+    fun reset() = _uiState.update {
+        it.copy(
+            identitas = "", password = "", butuhBuatPassword = false,
+            sibuk = false, pesan = null, pesanError = false,
+        )
+    }
+
     fun loginGoogle(activityContext: Context, onSukses: (SesiPengguna) -> Unit) {
         if (_uiState.value.sibuk) return
         _uiState.update { it.copy(sibuk = true, pesan = "Membuka Google Sign-In…", pesanError = false) }
@@ -94,7 +106,10 @@ class LoginViewModel(
     private fun tangani(hasil: HasilLogin, onSukses: (SesiPengguna) -> Unit) {
         when (hasil) {
             is HasilLogin.Sukses -> {
-                _uiState.update { it.copy(sibuk = false, pesan = null) }
+                // Bersihkan kredensial dari memori + form begitu login berhasil.
+                _uiState.update {
+                    it.copy(sibuk = false, pesan = null, identitas = "", password = "", butuhBuatPassword = false)
+                }
                 onSukses(hasil.sesi)
             }
             is HasilLogin.Gagal -> gagal(hasil.pesan)

@@ -33,6 +33,9 @@ fun LoginScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
 
+    // ViewModel hidup selama Activity — pastikan form kosong tiap layar dibuka.
+    LaunchedEffect(Unit) { viewModel.reset() }
+
     Box(
         Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center,
