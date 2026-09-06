@@ -62,6 +62,8 @@ data class KioskUiState(
     val lokasiDikonfigurasi: Boolean = false,
     /** Sync manual dari header sedang berjalan — dipakai tombol sync untuk spinner. */
     val sedangSync: Boolean = false,
+    /** Instruksi anti-spoof yang sedang aktif ("Kedipkan mata", "Verifikasi wajah…") — null = tak ada. */
+    val instruksiLiveness: String? = null,
 )
 
 /** Baris "Sync: 04/09 00:19 · 0 antre, 128 wajah, 11 jadwal". */
@@ -159,6 +161,9 @@ fun KioskScreen(
                     label = "hasil-scan"
                 ) { hasil ->
                     if (hasil == null) KartuIdle(kameraSiap) else KartuHasil(hasil)
+                }
+                if (state.hasilTerakhir == null && state.instruksiLiveness != null) {
+                    ChipInstruksi(state.instruksiLiveness)
                 }
             }
 
@@ -426,6 +431,23 @@ private fun KartuIdle(kameraSiap: Boolean) {
             color = AbsensiColors.InkSoft,
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun ChipInstruksi(teks: String) {
+    Surface(
+        color = AbsensiColors.Surface2,
+        contentColor = AbsensiColors.Ink,
+        shape = MaterialTheme.shapes.large,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Aksen),
+        modifier = Modifier.padding(top = Spasi.xl),
+    ) {
+        Text(
+            teks,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = Spasi.lg, vertical = Spasi.md),
         )
     }
 }

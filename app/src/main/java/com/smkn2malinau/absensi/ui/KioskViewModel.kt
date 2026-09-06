@@ -43,6 +43,10 @@ class KioskViewModel(
     private val tanggalProvider: () -> LocalDate = { LocalDate.now() },
     /** Ambang *distance* face-matching — bisa dikalibrasi runtime dari Panel Admin. */
     private val ambangJarak: Float = LivenessEvaluator.AMBANG_JARAK_DEFAULT,
+    /** Jumlah frame BERUNTUN yang harus lolos liveness sebelum wajah diproses (1 = perilaku lama). */
+    private val livenessFrameMin: Int = 1,
+    /** Challenge kedip aktif — minta 1 kedipan setelah frame liveness cukup. */
+    private val kedipWajib: Boolean = false,
     /** Picu satu siklus sync (mis. `SyncWorker.enqueueSekali`) — dipanggil tiap absen tersimpan + berkala. */
     private val picuSinkron: () -> Unit = {},
     /** Pemuatan model ONNX — dijalankan sekali saat ViewModel dibuat. */
@@ -75,6 +79,20 @@ class KioskViewModel(
     private val sedangProses = AtomicBoolean(false)
     @Volatile private var terakhirDiprosesMs = 0L
     @Volatile private var hasilTampilSampaiMs = 0L
+
+    // Anti-spoof: frame liveness beruntun + challenge kedip. Reset begitu wajah
+    // hilang / gagal liveness, atau setelah satu keputusan absensi diambil.
+    @Volatile private var livenessStreak = 0
+    @Volatile private var kedipLihatTerbuka = false
+    @Volatile private var kedipLihatTertutup = false
+    @Volatile private var kedipMulaiMs = 0L
+
+    private fun resetLiveness() {
+        livenessStreak = 0
+        kedipLihatTerbuka = false
+        kedipLihatTertutup = false
+        kedipMulaiMs = 0L
+    }
 
     // Dua sinyal penyusun pil status kiri-atas (jaringan + hasil siklus sync terakhir).
     @Volatile private var jaringanOnline = true
@@ -236,12 +254,30 @@ class KioskViewModel(
         if (!lokasiValidProvider()) return
 
         val deteksi = faceEngine.prosesFrame(frame)
-        if (!deteksi.wajahTerdeteksi) return
+        if (!deteksi.wajahTerdeteksi) {
+            resetLiveness()
+            return
+        }
 
         if (!deteksi.lolosLiveness || deteksi.embedding == null) {
+            resetLiveness()
             tampilkan(HasilScan(StatusHasil.WAJAH_TIDAK_DIKENALI, pesan = "Wajah tidak valid"))
             return
         }
+
+        // Anti-spoof lapis 1 — butuh N frame liveness BERUNTUN (foto/replay yang
+        // sesekali turun di bawah ambang akan me-reset hitungan). Beban ~nol.
+        livenessStreak++
+        if (livenessStreak < livenessFrameMin) {
+            _uiState.update { it.copy(instruksiLiveness = "Verifikasi wajah…") }
+            return
+        }
+
+        // Anti-spoof lapis 2 (opsional) — challenge kedip.
+        if (kedipWajib && !prosesChallengeKedip(deteksi.mataTerbuka)) return
+
+        resetLiveness()
+        _uiState.update { it.copy(instruksiLiveness = null) }
 
         val match: SiswaCocok = repo.cariSiswaCocok(deteksi.embedding, ambangJarak)
         if (!match.ditemukan) {
@@ -321,7 +357,37 @@ class KioskViewModel(
 
     private fun tampilkan(hasil: HasilScan) {
         hasilTampilSampaiMs = System.currentTimeMillis() + TAMPIL_MS
-        _uiState.update { it.copy(hasilTerakhir = hasil) }
+        resetLiveness()
+        _uiState.update { it.copy(hasilTerakhir = hasil, instruksiLiveness = null) }
+    }
+
+    /**
+     * Challenge kedip: butuh urutan mata TERBUKA → TERTUTUP → TERBUKA.
+     * @return true bila kedipan terkonfirmasi (boleh lanjut proses absensi).
+     */
+    private fun prosesChallengeKedip(mataTerbuka: Float?): Boolean {
+        val now = System.currentTimeMillis()
+        if (kedipMulaiMs == 0L) kedipMulaiMs = now
+
+        if (now - kedipMulaiMs > KEDIP_TIMEOUT_MS) {
+            resetLiveness()
+            _uiState.update { it.copy(instruksiLiveness = "Hadap kamera lalu kedipkan mata") }
+            return false
+        }
+        if (mataTerbuka == null) {
+            // ML Kit tak memberi sinyal mata (sudut/pencahayaan). Kalau SELAMA
+            // challenge tak pernah dapat sinyal, lolos setelah 1,5× timeout —
+            // liveness N-frame sudah jalan, jangan bikin kiosk mati total.
+            return now - kedipMulaiMs > KEDIP_TIMEOUT_MS * 3 / 2 &&
+                !kedipLihatTerbuka && !kedipLihatTertutup
+        }
+        when {
+            mataTerbuka >= KEDIP_MATA_TERBUKA && !kedipLihatTertutup -> kedipLihatTerbuka = true
+            mataTerbuka <= KEDIP_MATA_TERTUTUP && kedipLihatTerbuka -> kedipLihatTertutup = true
+            mataTerbuka >= KEDIP_MATA_TERBUKA && kedipLihatTertutup -> return true
+        }
+        _uiState.update { it.copy(instruksiLiveness = "Kedipkan mata") }
+        return false
     }
 
     private fun petakan(
@@ -369,6 +435,11 @@ class KioskViewModel(
         private const val THROTTLE_MS = 600L
         private const val TAMPIL_MS = 4000L
         private const val RINGKASAN_REFRESH_MS = 15_000L
+
+        // Challenge kedip
+        private const val KEDIP_TIMEOUT_MS = 7_000L
+        private const val KEDIP_MATA_TERBUKA = 0.6f
+        private const val KEDIP_MATA_TERTUTUP = 0.35f
         private const val SINKRON_BERKALA_MS = 90_000L
         private const val PICU_SINKRON_MIN_MS = 10_000L
     }

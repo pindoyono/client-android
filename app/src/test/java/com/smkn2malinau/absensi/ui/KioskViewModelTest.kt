@@ -72,13 +72,18 @@ class KioskViewModelTest {
         repo: FakeRepo,
         onSiteTestingSelesai: Boolean,
         jam: LocalTime = LocalTime.of(6, 45),
+        livenessFrameMin: Int = 1,
+        kedipWajib: Boolean = false,
+        urutanDeteksi: List<HasilDeteksiWajah> = listOf(deteksi),
     ) = KioskViewModel(
-        faceEngine = FakeFaceEngine(deteksi),
+        faceEngine = FakeFaceEngine(urutanDeteksi),
         attendanceLogic = AttendanceLogic(),
         repo = repo,
         onSiteTestingSelesai = { onSiteTestingSelesai },
         jamProvider = { jam },
         tanggalProvider = { LocalDate.of(2026, 9, 2) },
+        livenessFrameMin = livenessFrameMin,
+        kedipWajib = kedipWajib,
     ).also { vmsAktif += it }
 
     @Test
@@ -128,6 +133,63 @@ class KioskViewModelTest {
 
         assertTrue(repo.disimpan.isEmpty())
         assertEquals(StatusHasil.WAJAH_TIDAK_DIKENALI, vm.uiState.value.hasilTerakhir?.status)
+    }
+
+    @Test
+    fun `liveness butuh 3 frame beruntun - baru simpan di frame ke-3`() = runVmTest {
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
+        val vm = vm(deteksiSukses(), repo, onSiteTestingSelesai = true, livenessFrameMin = 3)
+
+        vm.prosesFrame(ByteArray(4))
+        assertTrue("frame 1 belum cukup", repo.disimpan.isEmpty())
+        vm.prosesFrame(ByteArray(4))
+        assertTrue("frame 2 belum cukup", repo.disimpan.isEmpty())
+        vm.prosesFrame(ByteArray(4))
+        assertEquals("frame 3 = 3 beruntun -> simpan", 1, repo.disimpan.size)
+    }
+
+    @Test
+    fun `liveness gagal di tengah - reset hitungan frame beruntun`() = runVmTest {
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
+        val gagal = deteksiSukses().copy(lolosLiveness = false, embedding = null)
+        val vm = vm(
+            deteksiSukses(), repo, onSiteTestingSelesai = true, livenessFrameMin = 3,
+            urutanDeteksi = listOf(deteksiSukses(), deteksiSukses(), gagal, deteksiSukses(), deteksiSukses(), deteksiSukses()),
+        )
+
+        repeat(3) { vm.prosesFrame(ByteArray(4)) }  // asli, asli, GAGAL -> streak reset
+        assertTrue(repo.disimpan.isEmpty())
+        repeat(2) { vm.prosesFrame(ByteArray(4)) }  // asli, asli -> baru 2
+        assertTrue(repo.disimpan.isEmpty())
+        vm.prosesFrame(ByteArray(4))                // asli -> 3 beruntun
+        assertEquals(1, repo.disimpan.size)
+    }
+
+    @Test
+    fun `challenge kedip - buka lalu tutup lalu buka baru simpan`() = runVmTest {
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
+        fun mata(p: Float) = deteksiSukses().copy(mataTerbuka = p)
+        val vm = vm(
+            deteksiSukses(), repo, onSiteTestingSelesai = true, kedipWajib = true,
+            urutanDeteksi = listOf(mata(0.9f), mata(0.9f), mata(0.1f), mata(0.9f)),
+        )
+
+        vm.prosesFrame(ByteArray(4)); assertTrue(repo.disimpan.isEmpty())  // terbuka
+        vm.prosesFrame(ByteArray(4)); assertTrue(repo.disimpan.isEmpty())  // masih terbuka
+        vm.prosesFrame(ByteArray(4)); assertTrue(repo.disimpan.isEmpty())  // tertutup
+        vm.prosesFrame(ByteArray(4))                                       // terbuka lagi -> kedip!
+        assertEquals(1, repo.disimpan.size)
+    }
+
+    @Test
+    fun `challenge kedip - mata terus terbuka (foto) tidak pernah simpan`() = runVmTest {
+        val repo = FakeRepo(match = cocok(), jadwal = jadwalStandar)
+        val vm = vm(
+            deteksiSukses().copy(mataTerbuka = 0.95f), repo, onSiteTestingSelesai = true, kedipWajib = true,
+        )
+        repeat(10) { vm.prosesFrame(ByteArray(4)) }
+        assertTrue(repo.disimpan.isEmpty())
+        assertEquals("Kedipkan mata", vm.uiState.value.instruksiLiveness)
     }
 
     @Test
@@ -203,12 +265,17 @@ class KioskViewModelTest {
         ditemukan = true, siswaId = 7, nis = "23200", nama = "Budi", kelas = "XI-E", jarak = 0.1f
     )
 
-    private class FakeFaceEngine(private val hasil: HasilDeteksiWajah) : FaceEngine {
+    private class FakeFaceEngine(private val urutan: List<HasilDeteksiWajah>) : FaceEngine {
+        constructor(hasil: HasilDeteksiWajah) : this(listOf(hasil))
+        private var i = 0
+        private fun kini() = urutan[minOf(i, urutan.lastIndex)].also { i++ }
         override suspend fun loadModels(livenessModelPath: String, embeddingModelPath: String) {}
-        override suspend fun extractEmbedding(bitmapBytes: ByteArray): FloatArray? = hasil.embedding
-        override suspend fun detectLiveness(bitmapBytes: ByteArray): LivenessResult =
-            LivenessResult(hasil.livenessScore, hasil.lolosLiveness, hasil.livenessScore)
-        override suspend fun prosesFrame(frameBytes: ByteArray): HasilDeteksiWajah = hasil
+        override suspend fun extractEmbedding(bitmapBytes: ByteArray): FloatArray? = urutan.first().embedding
+        override suspend fun detectLiveness(bitmapBytes: ByteArray): LivenessResult {
+            val h = urutan.first()
+            return LivenessResult(h.livenessScore, h.lolosLiveness, h.livenessScore)
+        }
+        override suspend fun prosesFrame(frameBytes: ByteArray): HasilDeteksiWajah = kini()
     }
 
     data class Disimpan(val siswaId: Int, val hasil: HasilAbsen, val status: String, val catatan: String?)

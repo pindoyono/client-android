@@ -87,5 +87,11 @@ data class HasilDeteksiWajah(
     val embedding: FloatArray?,
     val livenessScore: Float,
     val ambangLiveness: Float,
-    val alasanGagal: String?
+    val alasanGagal: String?,
+    /**
+     * Probabilitas mata terbuka (0..1) dari ML Kit — MIN mata kiri & kanan.
+     * null bila klasifikasi mata tidak aktif (challenge kedip mati) atau ML Kit
+     * tak yakin. Dipakai KioskViewModel untuk challenge kedip.
+     */
+    val mataTerbuka: Float? = null,
 )

@@ -149,6 +149,7 @@ fun AdminPanelScreen(
                     Seksi.PENGATURAN -> PengaturanPane(
                         state, viewModel::simpanServerUrl, viewModel::setLensaDepan,
                         viewModel::simpanFaceKey, viewModel::tesFaceKey, viewModel::simpanAmbangJarak,
+                        viewModel::simpanLivenessFrameMin, viewModel::setKedipWajib,
                     ) {
                         viewModel.hapusKredensial(onKredensialDihapus)
                     }
@@ -492,11 +493,14 @@ private fun PengaturanPane(
     onSaveFaceKey: (String) -> Unit,
     onTesFaceKey: () -> Unit,
     onSaveAmbang: (Float) -> Unit,
+    onSaveFrameMin: (Int) -> Unit,
+    onKedip: (Boolean) -> Unit,
     onHapusKredensial: () -> Unit,
 ) {
     var url by remember(state.serverUrl) { mutableStateOf(state.serverUrl) }
     var faceKey by remember(state.faceKey) { mutableStateOf(state.faceKey) }
     var ambang by remember(state.ambangJarak) { mutableFloatStateOf(state.ambangJarak) }
+    var frameMin by remember(state.livenessFrameMin) { mutableFloatStateOf(state.livenessFrameMin.toFloat()) }
     var konfirmasiHapus by remember { mutableStateOf(false) }
 
     Column(
@@ -550,6 +554,33 @@ private fun PengaturanPane(
                     style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkSoft,
                 )
                 Button(onClick = { onSaveAmbang(ambang) }, modifier = Modifier.align(Alignment.End)) { Text("Simpan Ambang") }
+            }
+        }
+
+        Surface(color = AbsensiColors.Surface, shape = MaterialTheme.shapes.medium, border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(Spasi.md), verticalArrangement = Arrangement.spacedBy(Spasi.sm)) {
+                Text("Anti-spoof liveness", style = MaterialTheme.typography.labelMedium, color = AbsensiColors.InkMuted)
+                Text("Frame liveness beruntun: ${frameMin.toInt()}", style = MaterialTheme.typography.bodyMedium)
+                Slider(value = frameMin, onValueChange = { frameMin = it }, valueRange = 1f..5f, steps = 3)
+                Text(
+                    "Wajah harus lolos liveness ${frameMin.toInt()} frame berturut-turut sebelum diproses. " +
+                        "Lebih tinggi = foto/replay lebih sulit lolos, tapi scan sedikit lebih lama. Beban device ~nol. Default 3.",
+                    style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkSoft,
+                )
+                Button(onClick = { onSaveFrameMin(frameMin.toInt()) }, modifier = Modifier.align(Alignment.End)) { Text("Simpan") }
+
+                HorizontalDivider(color = AbsensiColors.Border)
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Wajibkan kedip mata", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Kiosk minta 1 kedipan sebelum absen. Menambah friksi + sedikit beban (klasifikasi mata ML Kit). Default mati.",
+                            style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkSoft,
+                        )
+                    }
+                    Switch(checked = state.kedipWajib, onCheckedChange = onKedip)
+                }
             }
         }
 

@@ -10,9 +10,11 @@ import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.smkn2malinau.absensi.security.CredentialManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -42,11 +44,21 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
 
     override fun statusAkselerasi(): String = statusAkselerasi
 
+    /** Klasifikasi mata (untuk challenge kedip) hanya diaktifkan kalau admin menyalakannya —
+     *  menambah sedikit beban ML Kit, jadi jangan default. */
+    private val butuhKlasifikasiMata: Boolean =
+        runCatching { CredentialManager(appContext).getKedipWajib() }.getOrDefault(false)
+
     private val faceDetector: FaceDetector by lazy {
         FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
                 .setMinFaceSize(0.15f)
+                .apply {
+                    if (butuhKlasifikasiMata) {
+                        setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                    }
+                }
                 .build()
         )
     }
@@ -94,14 +106,15 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
         val embeddingS = embeddingSession
         if (ortEnv == null || livenessS == null || embeddingS == null) return@withContext gagalDeteksi("engine_belum_siap")
 
-        val wajah = decodeDanCropWajah(frameBytes) ?: return@withContext gagalDeteksi("wajah_tidak_terdeteksi")
+        val crop = decodeDanCropWajah(frameBytes) ?: return@withContext gagalDeteksi("wajah_tidak_terdeteksi")
+        val wajah = crop.bitmap
         try {
             val skorLive = jalankanLiveness(ortEnv, livenessS, wajah)
             if (!LivenessEvaluator.evaluasiLiveness(floatArrayOf(skorLive))) {
                 return@withContext HasilDeteksiWajah(
                     wajahTerdeteksi = true, lolosLiveness = false, embedding = null,
                     livenessScore = skorLive, ambangLiveness = LivenessEvaluator.AMBANG_LIVENESS_DEFAULT,
-                    alasanGagal = "gagal_liveness",
+                    alasanGagal = "gagal_liveness", mataTerbuka = crop.mataTerbuka,
                 )
             }
             val embedding = jalankanEmbedding(ortEnv, embeddingS, wajah)
@@ -109,6 +122,7 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
                 wajahTerdeteksi = true, lolosLiveness = true, embedding = embedding,
                 livenessScore = skorLive, ambangLiveness = LivenessEvaluator.AMBANG_LIVENESS_DEFAULT,
                 alasanGagal = if (embedding == null) "embedding_gagal" else null,
+                mataTerbuka = crop.mataTerbuka,
             )
         } catch (e: Exception) {
             Log.e("MiniFasNetEngine", "prosesFrame gagal", e)
@@ -123,7 +137,7 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
         val embeddingS = embeddingSession
         if (ortEnv == null || embeddingS == null) return@withContext gagalDeteksi("engine_belum_siap")
 
-        val wajah = decodeDanCropWajah(frameBytes) ?: return@withContext gagalDeteksi("wajah_tidak_terdeteksi")
+        val wajah = decodeDanCropWajah(frameBytes)?.bitmap ?: return@withContext gagalDeteksi("wajah_tidak_terdeteksi")
         try {
             val embedding = jalankanEmbedding(ortEnv, embeddingS, wajah)
             HasilDeteksiWajah(
@@ -144,7 +158,7 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
     override suspend fun extractEmbedding(bitmapBytes: ByteArray): FloatArray? = withContext(Dispatchers.IO) {
         val ortEnv = env ?: return@withContext null
         val session = embeddingSession ?: return@withContext null
-        val wajah = decodeDanCropWajah(bitmapBytes) ?: return@withContext null
+        val wajah = decodeDanCropWajah(bitmapBytes)?.bitmap ?: return@withContext null
         try {
             jalankanEmbedding(ortEnv, session, wajah)
         } catch (e: Exception) {
@@ -158,7 +172,7 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
     override suspend fun detectLiveness(bitmapBytes: ByteArray): LivenessResult? = withContext(Dispatchers.IO) {
         val ortEnv = env ?: return@withContext null
         val session = livenessSession ?: return@withContext null
-        val wajah = decodeDanCropWajah(bitmapBytes) ?: return@withContext null
+        val wajah = decodeDanCropWajah(bitmapBytes)?.bitmap ?: return@withContext null
         try {
             val score = jalankanLiveness(ortEnv, session, wajah)
             LivenessResult(score, LivenessEvaluator.evaluasiLiveness(floatArrayOf(score)), score)
@@ -193,18 +207,21 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
 
     // --- Deteksi & crop wajah ---
 
+    /** Wajah ter-crop + probabilitas mata terbuka (null kalau klasifikasi mati / tak yakin). */
+    private class WajahCrop(val bitmap: Bitmap, val mataTerbuka: Float?)
+
     /** Decode JPEG → deteksi wajah terbesar (ML Kit) → crop kotak + margin. null = tak ada wajah. */
-    private fun decodeDanCropWajah(jpegBytes: ByteArray): Bitmap? {
+    private fun decodeDanCropWajah(jpegBytes: ByteArray): WajahCrop? {
         val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size) ?: return null
         return try {
-            val box = deteksiKotakWajah(bitmap)
-            if (box == null) {
+            val face = deteksiWajah(bitmap)
+            if (face == null) {
                 bitmap.recycle()
                 null
             } else {
-                val crop = cropDenganMargin(bitmap, box, MARGIN_WAJAH)
+                val crop = cropDenganMargin(bitmap, face.boundingBox, MARGIN_WAJAH)
                 if (crop !== bitmap) bitmap.recycle()
-                crop
+                WajahCrop(crop, probMataTerbuka(face))
             }
         } catch (e: Exception) {
             Log.w("MiniFasNetEngine", "Deteksi wajah gagal", e)
@@ -213,10 +230,17 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
         }
     }
 
-    private fun deteksiKotakWajah(bitmap: Bitmap): Rect? {
+    private fun deteksiWajah(bitmap: Bitmap): Face? {
         val image = InputImage.fromBitmap(bitmap, 0)
         val faces = Tasks.await(faceDetector.process(image))
-        return faces.maxByOrNull { it.boundingBox.width().toLong() * it.boundingBox.height() }?.boundingBox
+        return faces.maxByOrNull { it.boundingBox.width().toLong() * it.boundingBox.height() }
+    }
+
+    /** MIN(prob mata kiri, prob mata kanan). null bila ML Kit tak menyediakan (klasifikasi mati). */
+    private fun probMataTerbuka(face: Face): Float? {
+        val kiri = face.leftEyeOpenProbability ?: return null
+        val kanan = face.rightEyeOpenProbability ?: return null
+        return minOf(kiri, kanan)
     }
 
     private fun cropDenganMargin(src: Bitmap, box: Rect, margin: Float): Bitmap {

@@ -46,6 +46,8 @@ class CredentialManager(context: Context) {
     private val PREF_LENSA_KAMERA = "lensa_kamera" // "depan" | "belakang"
     private val PREF_FACE_KEY = "face_encryption_key_enc"
     private val PREF_AMBANG_JARAK = "ambang_jarak_wajah"
+    private val PREF_LIVENESS_FRAME_MIN = "liveness_frame_min"
+    private val PREF_LIVENESS_KEDIP = "liveness_kedip_wajib"
     private val PREF_SESI = "sesi_pengguna_enc"        // "identitas|nama|role|siswaId"
     private val PREF_JWT_GURU = "jwt_guru_enc"          // Bearer JWT dari login Google — kelola jadwal server
     private val PREF_SESI_SAMPAI = "sesi_pengguna_sampai"
@@ -209,6 +211,28 @@ class CredentialManager(context: Context) {
 
     fun saveAmbangJarak(nilai: Float) =
         prefs.edit().putFloat(PREF_AMBANG_JARAK, nilai.coerceIn(0.20f, 0.80f)).apply()
+
+    /**
+     * Berapa frame BERUNTUN harus lolos liveness sebelum wajah diproses (1–5,
+     * default 3). >1 = spoof (foto) harus stabil di atas ambang beberapa frame
+     * berturut-turut — friksi kecil, beban device ~nol (cuma penghitung).
+     */
+    fun getLivenessFrameMin(): Int =
+        prefs.getInt(PREF_LIVENESS_FRAME_MIN, 3).coerceIn(1, 5)
+
+    fun saveLivenessFrameMin(n: Int) =
+        prefs.edit().putInt(PREF_LIVENESS_FRAME_MIN, n.coerceIn(1, 5)).apply()
+
+    /**
+     * Challenge kedip aktif (default false). Kalau true: setelah frame liveness
+     * cukup, kiosk minta 1 kedipan mata sebelum menyimpan absensi. Menambah
+     * beban ringan (klasifikasi mata ML Kit) — hanya kalau diaktifkan.
+     */
+    fun getKedipWajib(): Boolean =
+        prefs.getBoolean(PREF_LIVENESS_KEDIP, false)
+
+    fun saveKedipWajib(aktif: Boolean) =
+        prefs.edit().putBoolean(PREF_LIVENESS_KEDIP, aktif).apply()
 
     // --- Sesi login Panel Admin (TTL 8 jam) ---
 

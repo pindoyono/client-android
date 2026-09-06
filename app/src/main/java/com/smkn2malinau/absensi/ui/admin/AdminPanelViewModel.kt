@@ -48,6 +48,9 @@ data class AdminPanelUiState(
     val lensaDepan: Boolean = true,
     val faceKey: String = "",
     val ambangJarak: Float = 0.3542f,
+    /** Anti-spoof: frame liveness beruntun (1–5) + challenge kedip. */
+    val livenessFrameMin: Int = 3,
+    val kedipWajib: Boolean = false,
 )
 
 class AdminPanelViewModel(
@@ -64,6 +67,8 @@ class AdminPanelViewModel(
             lensaDepan = credentialManager.lensaKameraDepan(),
             faceKey = credentialManager.getFaceKey(),
             ambangJarak = credentialManager.getAmbangJarak(),
+            livenessFrameMin = credentialManager.getLivenessFrameMin(),
+            kedipWajib = credentialManager.getKedipWajib(),
         )
     )
     val uiState: StateFlow<AdminPanelUiState> = _uiState.asStateFlow()
@@ -242,6 +247,21 @@ class AdminPanelViewModel(
         credentialManager.saveAmbangJarak(nilai)
         _uiState.update { it.copy(ambangJarak = credentialManager.getAmbangJarak()) }
         pesanSukses("Ambang match disimpan (${"%.2f".format(nilai)}). Berlaku untuk scan berikutnya.")
+    }
+
+    fun simpanLivenessFrameMin(n: Int) {
+        credentialManager.saveLivenessFrameMin(n)
+        _uiState.update { it.copy(livenessFrameMin = credentialManager.getLivenessFrameMin()) }
+        pesanSukses("Liveness: butuh ${credentialManager.getLivenessFrameMin()} frame beruntun. Buka ulang kiosk agar berlaku.")
+    }
+
+    fun setKedipWajib(aktif: Boolean) {
+        credentialManager.saveKedipWajib(aktif)
+        _uiState.update { it.copy(kedipWajib = credentialManager.getKedipWajib()) }
+        pesanSukses(
+            if (aktif) "Challenge kedip aktif. Buka ulang kiosk agar berlaku."
+            else "Challenge kedip dimatikan. Buka ulang kiosk agar berlaku."
+        )
     }
 
     fun simpanFaceKey(key: String) {

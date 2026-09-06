@@ -42,6 +42,8 @@ class KioskViewModelFactory(context: Context) : ViewModelProvider.Factory {
             onlineFlow = NetworkMonitor(appContext).onlineFlow,
             onSiteTestingSelesai = { credentialManager.isOnSiteTestingSelesai() },
             ambangJarak = credentialManager.getAmbangJarak(),
+            livenessFrameMin = credentialManager.getLivenessFrameMin(),
+            kedipWajib = credentialManager.getKedipWajib(),
             picuSinkron = { SyncWorker.enqueueSekali(appContext) },
             muatModel = { faceEngine.loadModels(LIVENESS_MODEL, EMBEDDING_MODEL) },
             lokasiValidProvider = { credentialManager.lokasiValid() },
