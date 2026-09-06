@@ -23,8 +23,9 @@ android {
         applicationId = "com.smkn2malinau.absensi"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Naikkan tiap rilis supaya device kiosk mengenali APK baru sebagai update.
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -67,8 +68,31 @@ android {
         )
     }
 
+    // Signing rilis — kredensial dibaca dari local.properties (TIDAK di-commit),
+    // pola sama seperti DEFAULT_ADMIN_* di atas. Isi:
+    //   RELEASE_STORE_FILE=D:/path/ke/rilis.jks   (absolut, atau relatif ke folder app/)
+    //   RELEASE_STORE_PASSWORD=...
+    //   RELEASE_KEY_ALIAS=...
+    //   RELEASE_KEY_PASSWORD=...
+    // Kalau RELEASE_STORE_FILE kosong / file tak ada → release tetap dibuild
+    // TANPA tanda tangan (app-release-unsigned.apk), perilaku lama.
+    val releaseStorePath = localOrDefault("RELEASE_STORE_FILE", "")
+    val releaseStoreFile = if (releaseStorePath.isNotBlank()) file(releaseStorePath) else null
+    signingConfigs {
+        if (releaseStoreFile != null && releaseStoreFile.exists()) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = localOrDefault("RELEASE_STORE_PASSWORD", "")
+                keyAlias = localOrDefault("RELEASE_KEY_ALIAS", "")
+                keyPassword = localOrDefault("RELEASE_KEY_PASSWORD", "")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // null bila keystore belum dikonfigurasi → APK tidak ditandatangani.
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
