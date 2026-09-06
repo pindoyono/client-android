@@ -278,14 +278,20 @@ private fun JadwalPane(
         SubJudul("Jadwal Standar (per Hari)")
         val standarPerHari = state.jadwalStandarServer
             .filter { it.hari != null }
-            .sortedBy { URUT_HARI.indexOf(it.hari?.uppercase()) }
+            .sortedWith(
+                compareBy({ URUT_HARI.indexOf(it.hari?.uppercase()) }, { it.kelas ?: "" })
+            )
         when {
             standarPerHari.isNotEmpty() -> KartuTabel {
-                BarisTabel("Hari", "Masuk", "Pulang", "Durasi", tebal = true)
+                // Kolom Kelas: server bisa punya jadwal khusus per kelas
+                // (menimpa jadwal umum). "semua" = berlaku semua kelas.
+                BarisTabel("Kelas", "Hari", "Masuk", "Pulang", tebal = true)
                 standarPerHari.forEach { j ->
                     BarisTabel(
-                        j.hari ?: "-", (j.jamMasuk ?: "-").take(5), (j.jamPulang ?: "-").take(5),
-                        durasiJam(j.jamMasuk, j.jamPulang),
+                        j.kelas?.takeIf { it.isNotBlank() } ?: "semua",
+                        j.hari ?: "-",
+                        (j.jamMasuk ?: "-").take(5),
+                        (j.jamPulang ?: "-").take(5),
                     )
                 }
             }
@@ -359,18 +365,6 @@ private fun JadwalPane(
 }
 
 private val URUT_HARI = listOf("SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU")
-
-/** "8 jam 5 menit" dari dua jam server ("HH:mm:ss"), tanpa mengubah nilai aslinya. */
-private fun durasiJam(masuk: String?, pulang: String?): String {
-    return try {
-        val m = java.time.LocalTime.parse((masuk ?: return "-").take(8))
-        val p = java.time.LocalTime.parse((pulang ?: return "-").take(8))
-        var menit = java.time.Duration.between(m, p).toMinutes()
-        if (menit < 0) menit += 24 * 60
-        val jam = menit / 60; val sisa = menit % 60
-        if (sisa == 0L) "$jam jam" else "$jam jam $sisa menit"
-    } catch (e: Exception) { "-" }
-}
 
 @Composable
 private fun SubJudul(teks: String) {
