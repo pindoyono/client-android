@@ -379,6 +379,7 @@ class SyncServiceTest {
 
         override suspend fun loginGoogle(request: GoogleLoginRequest) = error("n/a")
         override suspend fun registerDevice(bearer: String, request: DeviceRegisterRequest) = error("n/a")
+        override suspend fun claimDevice(request: DeviceClaimRequest) = error("n/a")
         override suspend fun syncAbsensi(request: SyncAbsensiRequest): SyncAbsensiResponse {
             lastSyncRequest = request
             return syncResponse

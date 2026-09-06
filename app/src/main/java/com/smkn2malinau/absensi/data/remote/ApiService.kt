@@ -14,6 +14,10 @@ interface ApiService {
         @Body request: DeviceRegisterRequest
     ): DeviceRegisterResponse
 
+    // 0c. Tukar token QR provisioning jadi kredensial device. Tanpa header apa pun.
+    @POST("device/claim")
+    suspend fun claimDevice(@Body request: DeviceClaimRequest): DeviceClaimResponse
+
     // 1. Sync absensi batch
     @POST("absensi/sync")
     suspend fun syncAbsensi(@Body request: SyncAbsensiRequest): SyncAbsensiResponse

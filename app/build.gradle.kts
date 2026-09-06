@@ -136,6 +136,9 @@ dependencies {
     // untuk crop wajah sebelum MiniFasNet/ArcFace (setara Haar cascade client Windows).
     implementation("com.google.mlkit:face-detection:16.1.7")
 
+    // ML Kit Barcode Scanning — scan QR provisioning device (Setup Device).
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
     // Fused Location Provider — geofencing per device (lihat location/LocationChecker.kt)
     implementation("com.google.android.gms:play-services-location:21.3.0")
 

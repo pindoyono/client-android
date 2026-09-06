@@ -5,9 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.smkn2malinau.absensi.data.remote.ApiClientProvider
+import com.smkn2malinau.absensi.data.remote.DeviceClaimRequest
 import com.smkn2malinau.absensi.device.DeviceRegistrar
 import com.smkn2malinau.absensi.device.GoogleIdTokenProvider
 import com.smkn2malinau.absensi.device.HasilRegistrasi
+import com.smkn2malinau.absensi.device.QrClaim
+import retrofit2.HttpException
 import com.smkn2malinau.absensi.security.CredentialManager
 import com.smkn2malinau.absensi.validation.Validation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,6 +149,48 @@ class AdminViewModel(
                     "(${DeviceRegistrar.DOMAIN_DIIZINKAN.joinToString()})."
             )
             is HasilRegistrasi.Gagal -> selesaiError(hasil.pesan)
+        }
+    }
+
+    /**
+     * Provisioning via QR: scan QR "QR Setup" dari dashboard → tukar token ke
+     * server (`POST /device/claim`) → simpan device_id + api_key + face_key +
+     * server URL. Tidak perlu login Google di kiosk.
+     */
+    fun daftarDenganQr(rawPayload: String, onSelesai: () -> Unit) {
+        val s = _uiState.value
+        if (s.sedangProses) return
+        val payload = QrClaim.parse(rawPayload)
+            ?: return selesaiError("QR tidak dikenali. Pastikan ini QR Setup dari dashboard device.")
+        _uiState.update { it.copy(sedangProses = true, pesan = "Memvalidasi QR ke server…", pesanError = false) }
+        viewModelScope.launch {
+            val api = ApiClientProvider.createForRegistration(payload.server)
+            runCatching { api.claimDevice(DeviceClaimRequest(payload.token)) }
+                .onSuccess { resp ->
+                    credentialManager.saveServerBaseUrl(resp.server?.takeIf { it.isNotBlank() } ?: payload.server)
+                    credentialManager.saveDeviceId(resp.deviceId)
+                    credentialManager.saveApiKey(resp.apiKey)
+                    resp.faceEncryptionKey?.takeIf { it.isNotBlank() }?.let { credentialManager.saveFaceKey(it) }
+                    resp.namaLokasi?.takeIf { it.isNotBlank() }?.let { credentialManager.saveNamaLokasi(it) }
+                    credentialManager.setOnSiteTestingSelesai(!s.modeTestingAktif)
+                    _uiState.update {
+                        it.copy(
+                            sedangProses = false, butuhApiKeyManual = false, pesanError = false,
+                            deviceId = resp.deviceId, apiKey = resp.apiKey,
+                            faceKey = resp.faceEncryptionKey ?: it.faceKey,
+                            namaLokasi = resp.namaLokasi ?: it.namaLokasi,
+                            pesan = "Device terkonfigurasi dari QR: ${resp.deviceId}.",
+                        )
+                    }
+                    onSelesai()
+                }
+                .onFailure {
+                    selesaiError(
+                        if (it is HttpException && it.code() == 404)
+                            "QR sudah kedaluwarsa atau terpakai. Minta admin membuat QR baru di dashboard."
+                        else "Gagal klaim QR: ${it.message ?: it.javaClass.simpleName}"
+                    )
+                }
         }
     }
 

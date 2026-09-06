@@ -1,5 +1,9 @@
 package com.smkn2malinau.absensi.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -11,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.smkn2malinau.absensi.ui.theme.AbsensiColors
 import com.smkn2malinau.absensi.ui.theme.Spasi
@@ -31,6 +36,22 @@ fun AdminScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+
+    var modeScan by remember { mutableStateOf(false) }
+    val kameraScanLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> modeScan = granted }
+
+    if (modeScan) {
+        PemindaiQr(
+            onHasil = { isi ->
+                modeScan = false
+                viewModel.daftarDenganQr(isi, onSaveSuccess)
+            },
+            onBatal = { modeScan = false },
+        )
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -61,6 +82,25 @@ fun AdminScreen(
                 enabled = !state.sedangProses,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // --- Jalur 0: scan QR Setup dari dashboard (paling cepat, tanpa login) ---
+            KartuSeksi("Scan QR Setup") {
+                Button(
+                    onClick = {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA)
+                            == PackageManager.PERMISSION_GRANTED
+                        ) modeScan = true
+                        else kameraScanLauncher.launch(Manifest.permission.CAMERA)
+                    },
+                    enabled = !state.sedangProses,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) { Text("Scan QR Setup") }
+                Text(
+                    "Admin membuka \"QR Setup\" di dashboard device, lalu scan di sini — device ID, API key, & face key terisi otomatis.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AbsensiColors.InkMuted,
+                )
+            }
 
             // --- Jalur 1: registrasi otomatis via Google ---
             KartuSeksi("Cara cepat") {

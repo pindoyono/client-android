@@ -221,3 +221,17 @@ data class DeviceRegisterResponse(
             ?: apiKey?.takeIf { it.isNotBlank() }
             ?: deviceApiKey?.takeIf { it.isNotBlank() }
 }
+
+// --- Provisioning via QR — POST /device/claim ---
+
+data class DeviceClaimRequest(
+    @SerializedName("token") val token: String,
+)
+
+data class DeviceClaimResponse(
+    @SerializedName("server") val server: String? = null,
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("nama_lokasi") val namaLokasi: String? = null,
+    @SerializedName("api_key") val apiKey: String,
+    @SerializedName("face_encryption_key") val faceEncryptionKey: String? = null,
+)

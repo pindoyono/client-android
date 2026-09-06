@@ -146,6 +146,7 @@ class DeviceRegistrarTest {
             return register ?: error("register tidak di-set")
         }
 
+        override suspend fun claimDevice(request: DeviceClaimRequest) = error("n/a")
         override suspend fun syncAbsensi(request: SyncAbsensiRequest) = error("n/a")
         override suspend fun getEmbeddings(diperbaruiSejak: String?) = error("n/a")
         override suspend fun getJadwalEfektif(kelas: String?) = error("n/a")

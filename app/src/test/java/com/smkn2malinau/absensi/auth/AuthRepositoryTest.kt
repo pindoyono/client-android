@@ -147,6 +147,7 @@ class AuthRepositoryTest {
         override suspend fun loginGoogle(request: GoogleLoginRequest) =
             resp ?: error("no google resp")
         override suspend fun registerDevice(bearer: String, request: DeviceRegisterRequest) = error("n/a")
+        override suspend fun claimDevice(request: DeviceClaimRequest) = error("n/a")
         override suspend fun syncAbsensi(request: SyncAbsensiRequest) = error("n/a")
         override suspend fun getEmbeddings(diperbaruiSejak: String?) = error("n/a")
         override suspend fun getJadwalEfektif(kelas: String?) = error("n/a")
