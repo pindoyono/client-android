@@ -197,56 +197,49 @@ private fun BarisAtas(state: KioskUiState, onOpenAdmin: () -> Unit, onSyncSekara
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spasi.sm),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            // KIRI — menyusut/ellipsis kalau sempit (tombol admin tak boleh tergeser).
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 PilStatusJaringan(state.statusJaringan)
-                IconButton(onClick = onSyncSekarang, enabled = !state.sedangSync, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = onSyncSekarang, enabled = !state.sedangSync, modifier = Modifier.size(24.dp)) {
                     if (state.sedangSync) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AbsensiColors.InkSoft)
+                        CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = AbsensiColors.InkSoft)
                     } else {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Sync sekarang",
-                            tint = AbsensiColors.InkSoft,
-                            modifier = Modifier.size(16.dp),
-                        )
+                        Icon(Icons.Default.Refresh, "Sync sekarang", tint = AbsensiColors.InkSoft, modifier = Modifier.size(15.dp))
                     }
                 }
-                Icon(
-                    Icons.Default.LocationOn,
-                    contentDescription = if (state.lokasiDikonfigurasi) "Lokasi kiosk sudah diatur" else "Lokasi kiosk belum diatur",
-                    tint = if (state.lokasiDikonfigurasi) AbsensiColors.SuksesTeks else AbsensiColors.InkMuted,
-                    modifier = Modifier.padding(start = 4.dp).size(16.dp),
-                )
                 if (state.namaLokasi.isNotBlank()) {
                     Text(
-                        text = state.namaLokasi,
-                        color = AbsensiColors.InkSoft,
+                        text = "📍 ${state.namaLokasi}",
+                        color = if (state.lokasiDikonfigurasi) AbsensiColors.InkSoft else AbsensiColors.InkMuted,
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(start = 4.dp).widthIn(max = 140.dp),
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.LocationOn,
+                        contentDescription = if (state.lokasiDikonfigurasi) "Lokasi kiosk sudah diatur" else "Lokasi kiosk belum diatur",
+                        tint = if (state.lokasiDikonfigurasi) AbsensiColors.SuksesTeks else AbsensiColors.InkMuted,
+                        modifier = Modifier.size(15.dp),
                     )
                 }
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spasi.sm)
-            ) {
-                Text(
-                    text = state.jamSekarang,
-                    color = AbsensiColors.Ink,
-                    style = MaterialTheme.typography.titleLarge
-                )
-                IconButton(onClick = onOpenAdmin) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = "Buka menu admin",
-                        tint = AbsensiColors.InkSoft
-                    )
-                }
+            // KANAN — lebar natural, selalu terlihat.
+            Text(
+                text = state.jamSekarang,
+                color = AbsensiColors.Ink,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            IconButton(onClick = onOpenAdmin, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Settings, "Buka menu admin", tint = AbsensiColors.InkSoft, modifier = Modifier.size(20.dp))
             }
         }
 
@@ -315,9 +308,9 @@ private fun ChipJadwal(masuk: String?, pulang: String?, dariOverride: Boolean = 
 @Composable
 private fun PilStatusJaringan(status: StatusJaringan) {
     val (warna, teks) = when (status) {
-        StatusJaringan.ONLINE -> AbsensiColors.SuksesTeks to "Online · tersinkron"
-        StatusJaringan.SINKRON_TERTUNDA -> AbsensiColors.WarningTeks to "Online · belum tersinkron"
-        StatusJaringan.OFFLINE -> AbsensiColors.NetralTeks to "Offline · disimpan lokal"
+        StatusJaringan.ONLINE -> AbsensiColors.SuksesTeks to "Tersinkron"
+        StatusJaringan.SINKRON_TERTUNDA -> AbsensiColors.WarningTeks to "Belum sinkron"
+        StatusJaringan.OFFLINE -> AbsensiColors.NetralTeks to "Offline"
     }
     val warnaAnim by animateColorAsState(warna, tween(300), label = "dot")
     Surface(
