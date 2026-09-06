@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Aksen kiosk (AbsensiColors.Aksen) → biru gradient untuk latar ikon -->
+    <color name="ic_launcher_bg_start">#FF60A5FA</color>
+    <color name="ic_launcher_bg_end">#FF2563EB</color>
+</resources>
