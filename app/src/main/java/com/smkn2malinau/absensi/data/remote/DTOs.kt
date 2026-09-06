@@ -84,6 +84,24 @@ data class JadwalEfektifDto(
     @SerializedName("alasan") val alasan: String? = null
 )
 
+/** `GET /jadwal/standar` — daftar jadwal standar per hari (auth guru). */
+data class JadwalStandarDto(
+    @SerializedName("hari") val hari: String? = null,
+    @SerializedName("kelas") val kelas: String? = null,
+    @SerializedName("jam_masuk") val jamMasuk: String? = null,
+    @SerializedName("jam_pulang") val jamPulang: String? = null,
+)
+
+/** `GET /jadwal/override` — override server per tanggal (auth guru). `id` untuk DELETE. */
+data class JadwalOverrideServerDto(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("tanggal") val tanggal: String? = null,
+    @SerializedName("kelas") val kelas: String? = null,
+    @SerializedName("jam_masuk") val jamMasuk: String? = null,
+    @SerializedName("jam_pulang") val jamPulang: String? = null,
+    @SerializedName("alasan") val alasan: String? = null,
+)
+
 /** Item `GET /dispensasi/aktif?tanggal=` — server mengembalikan array polos. */
 data class DispensasiDto(
     @SerializedName("id") val id: Int = 0,

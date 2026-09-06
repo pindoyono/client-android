@@ -412,6 +412,9 @@ class SyncServiceTest {
             if (throwOnLokasiKonfig) throw RuntimeException("boom")
             return lokasiKonfigResponse
         }
+        override suspend fun getJadwalStandarServer(bearer: String) = emptyList<JadwalStandarDto>()
+        override suspend fun getJadwalOverrideServer(bearer: String) = emptyList<JadwalOverrideServerDto>()
+        override suspend fun hapusJadwalOverrideServer(bearer: String, id: Int) {}
     }
 
     private class FakeLocationChecker(private val hasil: HasilLokasi) : LocationChecker {

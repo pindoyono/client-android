@@ -66,6 +66,9 @@ class AuthRepository(
             return HasilLogin.Gagal("Tidak bisa menghubungi server — pakai login offline (email/NIS + password).")
         }
 
+        // JWT guru — untuk Panel Admin kelola jadwal server (offline login tak dapat ini).
+        resp.accessToken.takeIf { it.isNotBlank() }?.let { credentialManager.saveJwtGuru(it) }
+
         val role = Role.dari(resp.role)
         val nama = resp.nama?.takeIf { it.isNotBlank() } ?: namaGoogle ?: email
 

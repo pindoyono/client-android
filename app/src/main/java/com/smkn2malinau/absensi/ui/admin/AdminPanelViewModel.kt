@@ -10,6 +10,10 @@ import com.smkn2malinau.absensi.data.local.AbsensiDatabase
 import com.smkn2malinau.absensi.data.local.entity.AbsensiLokal
 import com.smkn2malinau.absensi.data.local.entity.JadwalCache
 import com.smkn2malinau.absensi.data.local.entity.JadwalOverrideLokal
+import com.smkn2malinau.absensi.data.remote.ApiClientProvider
+import com.smkn2malinau.absensi.data.remote.JadwalOverrideServerDto
+import com.smkn2malinau.absensi.data.remote.JadwalStandarDto
+import retrofit2.HttpException
 import com.smkn2malinau.absensi.repository.AdminRepository
 import com.smkn2malinau.absensi.repository.AdminRepositoryImpl
 import com.smkn2malinau.absensi.repository.SiswaLokalRow
@@ -28,6 +32,12 @@ data class AdminPanelUiState(
     val recordTerbaru: List<AbsensiLokal> = emptyList(),
     val jadwalStandar: List<JadwalCache> = emptyList(),
     val overrideLokal: List<JadwalOverrideLokal> = emptyList(),
+    /** Jadwal standar & override DARI SERVER — hanya terisi kalau ada JWT guru (login Google). */
+    val jadwalStandarServer: List<JadwalStandarDto> = emptyList(),
+    val overrideServer: List<JadwalOverrideServerDto> = emptyList(),
+    /** true = ada sesi guru online (JWT) → boleh kelola jadwal server. */
+    val bisaKelolaJadwalServer: Boolean = false,
+    val jadwalServerError: String? = null,
     val siswa: List<SiswaLokalRow> = emptyList(),
     val sedangSync: Boolean = false,
     val sedangTarikSiswa: Boolean = false,
@@ -96,6 +106,19 @@ class AdminPanelViewModel(
             val jadwal = runCatching { repo.jadwalStandar() }.getOrDefault(emptyList())
             val override = runCatching { repo.overrideLokalSemua() }.getOrDefault(emptyList())
             val siswa = runCatching { repo.daftarSiswaLokal() }.getOrDefault(emptyList())
+
+            // Jadwal server — hanya kalau login Google (punya JWT guru).
+            val jwt = credentialManager.getJwtGuru()
+            var stdServer = emptyList<JadwalStandarDto>()
+            var ovServer = emptyList<JadwalOverrideServerDto>()
+            var jErr: String? = null
+            if (jwt != null) {
+                val api = ApiClientProvider.createForRegistration(credentialManager.getServerBaseUrl())
+                runCatching { repo.jadwalServer(api, "Bearer $jwt") }
+                    .onSuccess { stdServer = it.standar; ovServer = it.override }
+                    .onFailure { jErr = ringkasJadwalError(it) }
+            }
+
             _uiState.update {
                 it.copy(
                     memuat = false,
@@ -103,6 +126,10 @@ class AdminPanelViewModel(
                     recordTerbaru = record,
                     jadwalStandar = jadwal,
                     overrideLokal = override,
+                    jadwalStandarServer = stdServer,
+                    overrideServer = ovServer,
+                    bisaKelolaJadwalServer = jwt != null,
+                    jadwalServerError = jErr,
                     siswa = siswa,
                 )
             }
@@ -166,6 +193,28 @@ class AdminPanelViewModel(
                 .onSuccess { pesanSukses("Override lokal dihapus."); refresh() }
                 .onFailure { pesanError("Gagal hapus: ${it.message}") }
         }
+    }
+
+    fun hapusOverrideServer(id: Int) {
+        val jwt = credentialManager.getJwtGuru()
+            ?: return pesanError("Sesi guru sudah kedaluwarsa — login Google (online) lagi untuk kelola jadwal server.")
+        viewModelScope.launch {
+            val api = ApiClientProvider.createForRegistration(credentialManager.getServerBaseUrl())
+            runCatching { repo.hapusOverrideServer(api, "Bearer $jwt", id) }
+                .onSuccess { pesanSukses("Override server dihapus. Kiosk lain ikut setelah sync."); refresh() }
+                .onFailure {
+                    val m = if (it is HttpException && it.code() in listOf(401, 403))
+                        "Ditolak — hanya admin / guru piket. Coba login Google lagi."
+                    else "Gagal hapus override server: ${it.message ?: it.javaClass.simpleName}"
+                    pesanError(m)
+                }
+        }
+    }
+
+    private fun ringkasJadwalError(e: Throwable): String = when {
+        e is HttpException && e.code() in listOf(401, 403) ->
+            "Sesi guru kedaluwarsa — login Google lagi untuk lihat jadwal server."
+        else -> "Jadwal server tak terjangkau: ${e.message ?: e.javaClass.simpleName}"
     }
 
     fun resetPushDitolak() {

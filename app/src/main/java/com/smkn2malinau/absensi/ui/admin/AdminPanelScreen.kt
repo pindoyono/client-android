@@ -140,7 +140,7 @@ fun AdminPanelScreen(
             Box(Modifier.fillMaxSize().padding(pad)) {
                 when (seksi) {
                     Seksi.SINKRONISASI -> SinkronisasiPane(state, { viewModel.syncSekarang(context) }, viewModel::refresh)
-                    Seksi.JADWAL -> JadwalPane(state, viewModel::tambahOverrideLokal, viewModel::hapusOverrideLokal, viewModel::resetPushDitolak)
+                    Seksi.JADWAL -> JadwalPane(state, viewModel::tambahOverrideLokal, viewModel::hapusOverrideLokal, viewModel::resetPushDitolak, viewModel::hapusOverrideServer)
                     Seksi.DATA_SISWA -> DataSiswaPane(state, viewModel::tarikSiswaDariServer, viewModel::refresh)
                     Seksi.AKUN -> AkunPane()
                     Seksi.ENROLLMENT -> Unit // ditangani di atas (layar penuh)
@@ -257,19 +257,72 @@ private fun JadwalPane(
     onTambah: (String, String, String, String, String) -> Unit,
     onHapus: (String) -> Unit,
     onReset: () -> Unit,
+    onHapusServer: (Int) -> Unit,
 ) {
     var tanggal by remember { mutableStateOf(LocalDate.now().toString()) }
     var kelas by remember { mutableStateOf("") }
     var jamMasuk by remember { mutableStateOf("07:00") }
     var jamPulang by remember { mutableStateOf("15:00") }
     var alasan by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val hariIni = LocalDate.now().toString()
 
     Column(
         Modifier.fillMaxSize().padding(Spasi.lg).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(Spasi.md)
     ) {
-        JudulPane("Jadwal", "Override lokal berlaku LANGSUNG untuk absensi offline (mendahului jadwal server).")
+        JudulPane("Pengaturan Jadwal Sekolah", "Jadwal standar diatur di dashboard web. Override berlaku untuk tanggal tertentu.")
 
+        // --- Jadwal Standar (per Hari) — dari server, fallback ke cache lokal ---
+        SubJudul("Jadwal Standar (per Hari)")
+        val standarPerHari = state.jadwalStandarServer
+            .filter { it.hari != null }
+            .sortedBy { URUT_HARI.indexOf(it.hari?.uppercase()) }
+        when {
+            standarPerHari.isNotEmpty() -> KartuTabel {
+                BarisTabel("Hari", "Masuk", "Pulang", "Durasi", tebal = true)
+                standarPerHari.forEach { j ->
+                    BarisTabel(
+                        j.hari ?: "-", (j.jamMasuk ?: "-").take(5), (j.jamPulang ?: "-").take(5),
+                        durasiJam(j.jamMasuk, j.jamPulang),
+                    )
+                }
+            }
+            state.jadwalStandar.isNotEmpty() -> KartuTabel {
+                BarisTabel("Kelas", "Hari", "Masuk", "Pulang", tebal = true)
+                state.jadwalStandar.forEach { j ->
+                    BarisTabel(j.kelas.ifBlank { "semua" }, j.hari, j.jam_masuk.take(5), j.jam_pulang.take(5))
+                }
+            }
+            else -> Text("Belum ada jadwal. Login Google atau jalankan sinkronisasi.", style = MaterialTheme.typography.bodyMedium, color = AbsensiColors.InkMuted)
+        }
+
+        // --- Override Jadwal (server) ---
+        SubJudul("Override Jadwal (server) — ${state.overrideServer.size}")
+        state.jadwalServerError?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = AbsensiColors.WarningTeks)
+        }
+        if (!state.bisaKelolaJadwalServer) {
+            Text(
+                "Login ke Panel Admin via Google (online) untuk melihat & menghapus override server.",
+                style = MaterialTheme.typography.bodyMedium, color = AbsensiColors.InkMuted,
+            )
+        } else if (state.overrideServer.isEmpty()) {
+            Text("Tidak ada override di server.", style = MaterialTheme.typography.bodyMedium, color = AbsensiColors.InkMuted)
+        } else {
+            KartuTabel {
+                BarisTabel("Tanggal", "Kelas", "Jam", "Alasan", tebal = true)
+                state.overrideServer.forEach { o -> BarisOverrideServer(o, hariIni, onHapusServer) }
+            }
+        }
+        OutlinedButton(onClick = {
+            val url = state.serverUrl.ifBlank { state.serverUrlDefault }
+                .replaceFirst("absen.", "front.").trimEnd('/') + "/dashboard/jadwal"
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        }) { Text("Buka Dashboard Web (jadwal lengkap)") }
+
+        // --- Override Jadwal Lokal (dibuat di device — berlaku offline) ---
+        SubJudul("Override Jadwal Lokal (dibuat di device) — ${state.overrideLokal.size}")
         Surface(
             color = AbsensiColors.Surface,
             shape = MaterialTheme.shapes.medium,
@@ -277,7 +330,7 @@ private fun JadwalPane(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(Spasi.md), verticalArrangement = Arrangement.spacedBy(Spasi.sm)) {
-                Text("Tambah override lokal", style = MaterialTheme.typography.labelMedium, color = AbsensiColors.InkMuted)
+                Text("Tambah override lokal (berlaku langsung, offline)", style = MaterialTheme.typography.labelMedium, color = AbsensiColors.InkMuted)
                 Row(horizontalArrangement = Arrangement.spacedBy(Spasi.sm)) {
                     OutlinedTextField(tanggal, { tanggal = it }, label = { Text("Tanggal") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(kelas, { kelas = it }, label = { Text("Kelas (kosong = semua)") }, singleLine = true, modifier = Modifier.weight(1f))
@@ -288,44 +341,80 @@ private fun JadwalPane(
                 }
                 OutlinedTextField(alasan, { alasan = it }, label = { Text("Alasan (opsional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Button(onClick = { onTambah(tanggal, kelas, jamMasuk, jamPulang, alasan) }, modifier = Modifier.align(Alignment.End)) {
-                    Text("Simpan override")
+                    Text("Simpan override lokal")
                 }
             }
         }
-
-        Text("Override lokal (${state.overrideLokal.size})", style = MaterialTheme.typography.labelMedium, color = AbsensiColors.InkMuted)
         if (state.overrideLokal.isEmpty()) {
             Text("Belum ada override lokal.", style = MaterialTheme.typography.bodyMedium, color = AbsensiColors.InkMuted)
         } else {
             KartuTabel {
                 BarisTabel("Tanggal", "Kelas", "Jam", "Status", tebal = true)
-                state.overrideLokal.forEach { o -> BarisOverride(o, onHapus) }
+                state.overrideLokal.forEach { o -> BarisOverride(o, hariIni, onHapus) }
             }
             OutlinedButton(onClick = onReset) { Text("Reset yang ditolak server") }
         }
+    }
+}
 
-        Text("Jadwal standar (cache server, ${state.jadwalStandar.size})", style = MaterialTheme.typography.labelMedium, color = AbsensiColors.InkMuted)
-        if (state.jadwalStandar.isEmpty()) {
-            Text("Belum ada jadwal ter-cache. Jalankan sinkronisasi.", style = MaterialTheme.typography.bodyMedium, color = AbsensiColors.InkMuted)
-        } else {
-            KartuTabel {
-                BarisTabel("Kelas", "Tanggal", "Masuk", "Pulang", tebal = true)
-                state.jadwalStandar.forEach { j -> BarisTabel(j.kelas, j.tanggal, j.jam_masuk.take(5), j.jam_pulang.take(5)) }
-            }
+private val URUT_HARI = listOf("SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU")
+
+/** "8 jam 5 menit" dari dua jam server ("HH:mm:ss"), tanpa mengubah nilai aslinya. */
+private fun durasiJam(masuk: String?, pulang: String?): String {
+    return try {
+        val m = java.time.LocalTime.parse((masuk ?: return "-").take(8))
+        val p = java.time.LocalTime.parse((pulang ?: return "-").take(8))
+        var menit = java.time.Duration.between(m, p).toMinutes()
+        if (menit < 0) menit += 24 * 60
+        val jam = menit / 60; val sisa = menit % 60
+        if (sisa == 0L) "$jam jam" else "$jam jam $sisa menit"
+    } catch (e: Exception) { "-" }
+}
+
+@Composable
+private fun SubJudul(teks: String) {
+    Text(teks, style = MaterialTheme.typography.titleSmall, color = AbsensiColors.Ink)
+}
+
+@Composable
+private fun BarisOverrideServer(o: com.smkn2malinau.absensi.data.remote.JadwalOverrideServerDto, hariIni: String, onHapus: (Int) -> Unit) {
+    val tgl = o.tanggal ?: "-"
+    val warna = when {
+        tgl < hariIni -> AbsensiColors.InkMuted
+        tgl == hariIni -> AbsensiColors.WarningTeks
+        else -> AbsensiColors.Ink
+    }
+    val label = when {
+        tgl < hariIni -> "$tgl · lewat"
+        tgl == hariIni -> "$tgl · hari ini"
+        else -> tgl
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        SelTabel(label, Modifier.weight(1.2f), warna)
+        SelTabel(o.kelas ?: "semua", Modifier.weight(0.8f), warna)
+        SelTabel("${(o.jamMasuk ?: "-").take(5)}–${(o.jamPulang ?: "-").take(5)}", Modifier.weight(1f), warna)
+        SelTabel(o.alasan ?: "-", Modifier.weight(1f), warna)
+        IconButton(onClick = { onHapus(o.id) }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.Delete, "Hapus override server", tint = AbsensiColors.BahayaTeks, modifier = Modifier.size(18.dp))
         }
     }
 }
 
 @Composable
-private fun BarisOverride(o: JadwalOverrideLokal, onHapus: (String) -> Unit) {
+private fun BarisOverride(o: JadwalOverrideLokal, hariIni: String, onHapus: (String) -> Unit) {
     val (teks, warna) = when (o.status_push) {
         "ok" -> "Di server" to AbsensiColors.SuksesTeks
         "ditolak" -> "Ditolak" to AbsensiColors.BahayaTeks
         else -> "Menunggu" to AbsensiColors.WarningTeks
     }
+    val tglLabel = when {
+        o.tanggal < hariIni -> "${o.tanggal} · lewat"
+        o.tanggal == hariIni -> "${o.tanggal} · hari ini"
+        else -> o.tanggal
+    }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        SelTabel(o.tanggal, Modifier.weight(1f))
-        SelTabel(o.kelas ?: "semua", Modifier.weight(1f))
+        SelTabel(tglLabel, Modifier.weight(1.2f))
+        SelTabel(o.kelas ?: "semua", Modifier.weight(0.8f))
         SelTabel("${o.jam_masuk.take(5)}–${o.jam_pulang.take(5)}", Modifier.weight(1f))
         SelTabel(teks, Modifier.weight(1f), warna)
         IconButton(onClick = { onHapus(o.id) }, modifier = Modifier.size(32.dp)) {

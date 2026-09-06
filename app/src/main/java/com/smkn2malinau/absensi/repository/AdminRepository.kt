@@ -7,6 +7,8 @@ import com.smkn2malinau.absensi.data.local.entity.JadwalCache
 import com.smkn2malinau.absensi.data.local.entity.JadwalOverrideLokal
 import com.smkn2malinau.absensi.data.local.entity.SiswaCache
 import com.smkn2malinau.absensi.data.remote.ApiService
+import com.smkn2malinau.absensi.data.remote.JadwalOverrideServerDto
+import com.smkn2malinau.absensi.data.remote.JadwalStandarDto
 import com.smkn2malinau.absensi.face.CryptoEmbedding
 import java.time.LocalDateTime
 import java.util.UUID
@@ -27,6 +29,11 @@ interface AdminRepository {
     suspend fun hapusOverrideLokal(id: String)
     suspend fun resetOverrideDitolak(): Int
 
+    /** Jadwal standar + override DARI SERVER (butuh Bearer JWT guru). Setara panel Windows. */
+    suspend fun jadwalServer(api: ApiService, bearer: String): JadwalServerHasil
+    /** Hapus satu override server (DELETE /jadwal/override/{id}) — butuh JWT admin/guru piket. */
+    suspend fun hapusOverrideServer(api: ApiService, bearer: String, id: Int)
+
     suspend fun daftarSiswaLokal(): List<SiswaLokalRow>
 
     /**
@@ -40,6 +47,11 @@ interface AdminRepository {
     /** Uji `faceKey` terhadap embedding cache. @return (total, berhasil didekripsi). */
     suspend fun tesDekripsiEmbedding(faceKey: String): Pair<Int, Int>
 }
+
+data class JadwalServerHasil(
+    val standar: List<JadwalStandarDto>,
+    val override: List<JadwalOverrideServerDto>,
+)
 
 data class SiswaTarikHasil(
     /** Jumlah siswa aktif dari server yang disimpan/diperbarui di cache. */
@@ -124,6 +136,14 @@ class AdminRepositoryImpl(private val db: AbsensiDatabase) : AdminRepository {
     override suspend fun hapusOverrideLokal(id: String) = db.jadwalDao().deleteOverrideLokal(id)
 
     override suspend fun resetOverrideDitolak(): Int = db.jadwalDao().resetOverrideDitolak()
+
+    override suspend fun jadwalServer(api: ApiService, bearer: String) = JadwalServerHasil(
+        standar = api.getJadwalStandarServer(bearer),
+        override = api.getJadwalOverrideServer(bearer),
+    )
+
+    override suspend fun hapusOverrideServer(api: ApiService, bearer: String, id: Int) =
+        api.hapusJadwalOverrideServer(bearer, id)
 
     override suspend fun tarikSiswaDariServer(api: ApiService): SiswaTarikHasil {
         val siswaDao = db.siswaDao()

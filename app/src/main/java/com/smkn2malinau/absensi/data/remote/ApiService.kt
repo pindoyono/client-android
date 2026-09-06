@@ -65,4 +65,18 @@ interface ApiService {
     // di-cache lokal untuk validasi jarak mandiri (GeoOffline) saat offline.
     @GET("device/{id}/lokasi")
     suspend fun getLokasiKonfig(@Path("id") deviceId: String): LokasiKonfigResponse
+
+    // 11. Kelola jadwal server — butuh Bearer JWT guru (bukan device key).
+    //     Dipakai Panel Admin (setara client Windows). Lihat AdminRepository.
+    @GET("jadwal/standar")
+    suspend fun getJadwalStandarServer(@Header("Authorization") bearer: String): List<JadwalStandarDto>
+
+    @GET("jadwal/override")
+    suspend fun getJadwalOverrideServer(@Header("Authorization") bearer: String): List<JadwalOverrideServerDto>
+
+    @DELETE("jadwal/override/{id}")
+    suspend fun hapusJadwalOverrideServer(
+        @Header("Authorization") bearer: String,
+        @Path("id") id: Int,
+    )
 }

@@ -47,6 +47,7 @@ class CredentialManager(context: Context) {
     private val PREF_FACE_KEY = "face_encryption_key_enc"
     private val PREF_AMBANG_JARAK = "ambang_jarak_wajah"
     private val PREF_SESI = "sesi_pengguna_enc"        // "identitas|nama|role|siswaId"
+    private val PREF_JWT_GURU = "jwt_guru_enc"          // Bearer JWT dari login Google — kelola jadwal server
     private val PREF_SESI_SAMPAI = "sesi_pengguna_sampai"
 
     /**
@@ -232,7 +233,26 @@ class CredentialManager(context: Context) {
         }
     }
 
-    fun clearSesi() = prefs.edit().remove(PREF_SESI).remove(PREF_SESI_SAMPAI).apply()
+    fun clearSesi() = prefs.edit().remove(PREF_SESI).remove(PREF_SESI_SAMPAI).remove(PREF_JWT_GURU).apply()
+
+    /**
+     * JWT guru dari login Google — dipakai Panel Admin untuk endpoint yang
+     * butuh auth guru (GET/DELETE /jadwal/override, GET /jadwal/standar).
+     * Umurnya diikat ke sesi (login offline/password TIDAK menghasilkan JWT →
+     * fitur kelola jadwal server nonaktif sampai login Google online).
+     */
+    fun saveJwtGuru(token: String) =
+        prefs.edit().putString(PREF_JWT_GURU, encrypt(token)).apply()
+
+    fun getJwtGuru(): String? {
+        if (System.currentTimeMillis() > prefs.getLong(PREF_SESI_SAMPAI, 0L)) return null
+        val enc = prefs.getString(PREF_JWT_GURU, null) ?: return null
+        return try {
+            decrypt(enc)
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     /**
      * Simpan passphrase database (SQLCipher).

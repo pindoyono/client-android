@@ -30,6 +30,7 @@ class AdminPanelViewModelTest {
     private val cm = mockk<CredentialManager>(relaxed = true).also {
         every { it.getServerBaseUrl() } returns null
         every { it.lensaKameraDepan() } returns true
+        every { it.getJwtGuru() } returns null
     }
     private val wm = mockk<WorkManager>().also {
         every { it.getWorkInfosForUniqueWorkFlow(any()) } returns flowOf(emptyList())
@@ -104,6 +105,37 @@ class AdminPanelViewModelTest {
         assertTrue(vm.uiState.value.pesanError)
     }
 
+    @Test
+    fun `tanpa JWT guru - override server tidak diambil, hapus server ditolak`() = runTest(mainDispatcherRule.dispatcher.scheduler) {
+        every { cm.getJwtGuru() } returns null
+        val repo = FakeAdminRepo()
+        val vm = vm(repo)
+        advanceUntilIdle()
+
+        assertEquals(false, vm.uiState.value.bisaKelolaJadwalServer)
+        assertEquals(0, repo.jadwalServerDipanggil)
+
+        vm.hapusOverrideServer(7)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.pesanError)
+        assertEquals(0, repo.overrideServerDihapus.size)
+    }
+
+    @Test
+    fun `dengan JWT guru - jadwal server dimuat dan hapus server jalan`() = runTest(mainDispatcherRule.dispatcher.scheduler) {
+        every { cm.getJwtGuru() } returns "tok"
+        val repo = FakeAdminRepo()
+        val vm = vm(repo)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.bisaKelolaJadwalServer)
+        assertEquals(1, repo.jadwalServerDipanggil)
+
+        vm.hapusOverrideServer(7)
+        advanceUntilIdle()
+        assertEquals(listOf(7), repo.overrideServerDihapus)
+    }
+
     data class OverrideDibuat(val kelas: String?, val jamMasuk: String, val jamPulang: String)
 
     private class FakeAdminRepo(
@@ -112,6 +144,8 @@ class AdminPanelViewModelTest {
     ) : AdminRepository {
         val overrideDisimpan = mutableListOf<OverrideDibuat>()
         val overrideDihapus = mutableListOf<String>()
+        val overrideServerDihapus = mutableListOf<Int>()
+        var jadwalServerDipanggil = 0
 
         override suspend fun statistikSync() = stat
         override suspend fun recordSyncTerbaru(limit: Int): List<AbsensiLokal> = emptyList()
@@ -122,6 +156,13 @@ class AdminPanelViewModelTest {
         }
         override suspend fun hapusOverrideLokal(id: String) { overrideDihapus.add(id) }
         override suspend fun resetOverrideDitolak(): Int = resetCount
+        override suspend fun jadwalServer(api: com.smkn2malinau.absensi.data.remote.ApiService, bearer: String): com.smkn2malinau.absensi.repository.JadwalServerHasil {
+            jadwalServerDipanggil++
+            return com.smkn2malinau.absensi.repository.JadwalServerHasil(emptyList(), emptyList())
+        }
+        override suspend fun hapusOverrideServer(api: com.smkn2malinau.absensi.data.remote.ApiService, bearer: String, id: Int) {
+            overrideServerDihapus.add(id)
+        }
         override suspend fun daftarSiswaLokal(): List<SiswaLokalRow> =
             listOf(SiswaLokalRow(1, "23001", "Budi", "XI-E", terEnroll = true, lokal = false))
         override suspend fun tarikSiswaDariServer(api: com.smkn2malinau.absensi.data.remote.ApiService) =
