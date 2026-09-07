@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,6 +23,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -331,8 +333,13 @@ private fun ChipJadwal(
     // Dropdown hanya bila ada > 1 jadwal (mis. jadwal khusus per kelas).
     val adaDropdown = opsiKelas.size > 1
     var menuTerbuka by remember { mutableStateOf(false) }
+    var cari by remember { mutableStateOf("") }
     val labelKelas = opsiKelas.firstOrNull { it.kelas == kelasDipilih }?.label
         ?: opsiKelas.firstOrNull()?.label ?: "Umum"
+    // Kotak cari muncul hanya kalau kelasnya banyak (kiosk dengan puluhan rombel).
+    val pakaiCari = opsiKelas.size > 6
+    val opsiTersaring = if (cari.isBlank()) opsiKelas
+        else opsiKelas.filter { it.label.contains(cari.trim(), ignoreCase = true) }
 
     Surface(
         color = AbsensiColors.Surface2,
@@ -362,11 +369,34 @@ private fun ChipJadwal(
                     tint = warnaTeks,
                     modifier = Modifier.size(18.dp),
                 )
-                DropdownMenu(expanded = menuTerbuka, onDismissRequest = { menuTerbuka = false }) {
-                    opsiKelas.forEach { o ->
+                DropdownMenu(
+                    expanded = menuTerbuka,
+                    onDismissRequest = { menuTerbuka = false; cari = "" },
+                    modifier = Modifier.heightIn(max = 360.dp),
+                ) {
+                    if (pakaiCari) {
+                        OutlinedTextField(
+                            value = cari,
+                            onValueChange = { cari = it },
+                            singleLine = true,
+                            placeholder = { Text("Cari kelas…") },
+                            leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) },
+                            modifier = Modifier
+                                .padding(horizontal = Spasi.sm, vertical = 4.dp)
+                                .width(240.dp),
+                        )
+                    }
+                    if (opsiTersaring.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Tidak ada kelas cocok", color = AbsensiColors.InkMuted) },
+                            onClick = {},
+                            enabled = false,
+                        )
+                    }
+                    opsiTersaring.forEach { o ->
                         DropdownMenuItem(
                             text = { Text("${o.label} — ${o.jamMasuk}/${o.jamPulang}") },
-                            onClick = { onPilihKelas(o.kelas); menuTerbuka = false },
+                            onClick = { onPilihKelas(o.kelas); menuTerbuka = false; cari = "" },
                         )
                     }
                 }
