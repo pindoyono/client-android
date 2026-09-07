@@ -19,4 +19,13 @@ data class AkunLokal(
     val siswa_id: Int? = null,
     val aktif: Int = 1,
     val diperbarui_pada: String,
+    /**
+     * 1 = wajib ganti password sebelum sesi diberikan. Diset untuk akun admin
+     * default hasil seed dari BuildConfig (`DEFAULT_ADMIN_PASS` — nilai yang
+     * SAMA di setiap APK & bisa diekstrak dari APK). Setelah admin login
+     * pertama & menggantinya, password baku itu tak berlaku lagi di device ini.
+     * Nullable (bukan Int=0) supaya migrasi Room cukup `ADD COLUMN ... INTEGER`
+     * tanpa DEFAULT — lihat catatan MIGRATION_2_3. null diperlakukan = 0.
+     */
+    val harus_ganti_sandi: Int? = null,
 )

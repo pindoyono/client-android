@@ -56,6 +56,27 @@ class AuthRepositoryTest {
     }
 
     @Test
+    fun `login pakai password baku - wajib ganti dulu`() = runBlocking {
+        val h = PasswordHasher.hash("Mcnan501234")
+        val dao = FakeAkunDao(
+            AkunLokal("mcnan", "Mcnan", "admin", h.hashB64, h.saltB64,
+                diperbarui_pada = "now", harus_ganti_sandi = 1)
+        )
+        val r = repo(dao).loginPassword("mcnan", "Mcnan501234")
+        assertTrue(r is HasilLogin.ButuhPassword && (r as HasilLogin.ButuhPassword).wajibGanti)
+
+        // password baru = sama dengan yang lama → ditolak
+        assertTrue(repo(dao).buatPasswordLaluLogin("mcnan", "Mcnan501234") is HasilLogin.Gagal)
+
+        // ganti ke password baru → sukses & flag hilang
+        val ok = repo(dao).buatPasswordLaluLogin("mcnan", "sandi-baru-kuat")
+        assertTrue(ok is HasilLogin.Sukses)
+        assertEquals(0, dao.get("mcnan")?.harus_ganti_sandi)
+        // password baku tak berlaku lagi
+        assertTrue(repo(dao).loginPassword("mcnan", "Mcnan501234") is HasilLogin.Gagal)
+    }
+
+    @Test
     fun `login google - upsert akun lokal dengan role server`() = runBlocking {
         val dao = FakeAkunDao()
         val api = FakeApi(GoogleLoginResponse(accessToken = "jwt", nama = "Pak Admin", role = "admin"))
@@ -137,7 +158,7 @@ class AuthRepositoryTest {
             data[identitas]?.let { data[identitas] = it.copy(aktif = 0) }
         }
         override suspend fun setPassword(identitas: String, hash: String, salt: String, waktu: String) {
-            data[identitas]?.let { data[identitas] = it.copy(password_hash = hash, salt = salt) }
+            data[identitas]?.let { data[identitas] = it.copy(password_hash = hash, salt = salt, harus_ganti_sandi = 0) }
         }
         override suspend fun countAdminAktif() = data.values.count { it.aktif == 1 && it.role == "admin" }
         override suspend fun countAktif() = data.values.count { it.aktif == 1 }

@@ -30,6 +30,9 @@ suspend fun AkunDao.seedAdminDefault(user: String, pass: String) {
             siswa_id = null,
             aktif = 1,
             diperbarui_pada = LocalDateTime.now().toString(),
+            // Password baku ini SAMA di setiap APK & bisa diekstrak — paksa ganti
+            // saat login pertama supaya tidak berlaku lama.
+            harus_ganti_sandi = 1,
         )
     )
 }

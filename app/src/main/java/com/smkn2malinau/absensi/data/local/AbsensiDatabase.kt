@@ -24,7 +24,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
         SyncEventLog::class,
         AkunLokal::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AbsensiDatabase : RoomDatabase() {
@@ -62,6 +62,15 @@ abstract class AbsensiDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 → v4: kolom `harus_ganti_sandi` di `akun_lokal` — paksa admin yang
+         *  login dengan password baku (dari BuildConfig) mengganti passwordnya.
+         *  Nullable, TANPA DEFAULT SQL (cocok dgn `val harus_ganti_sandi: Int?`). */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `akun_lokal` ADD COLUMN `harus_ganti_sandi` INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context, passphrase: ByteArray? = null): AbsensiDatabase {
             return INSTANCE ?: synchronized(this) {
                 val builder = Room.databaseBuilder(
@@ -75,7 +84,7 @@ abstract class AbsensiDatabase : RoomDatabase() {
                     builder.openHelperFactory(SupportOpenHelperFactory(passphrase))
                 }
 
-                builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                builder.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
                 val instance = builder.build()
                 INSTANCE = instance

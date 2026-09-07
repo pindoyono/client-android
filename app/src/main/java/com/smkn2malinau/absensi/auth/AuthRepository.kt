@@ -25,8 +25,14 @@ data class SesiPengguna(
 
 sealed interface HasilLogin {
     data class Sukses(val sesi: SesiPengguna) : HasilLogin
-    /** Google terverifikasi tapi akun belum punya password lokal — minta user membuatnya. */
-    data class ButuhPassword(val identitas: String, val nama: String, val role: Role) : HasilLogin
+    /**
+     * Akun perlu (mem)buat password lokal sebelum sesi diberikan. Dua sebab:
+     * - belum punya password sama sekali (`wajibGanti = false`), atau
+     * - login pakai password baku bawaan APK yang wajib diganti (`wajibGanti = true`).
+     */
+    data class ButuhPassword(
+        val identitas: String, val nama: String, val role: Role, val wajibGanti: Boolean = false,
+    ) : HasilLogin
     data class Gagal(val pesan: String) : HasilLogin
 }
 
@@ -100,16 +106,24 @@ class AuthRepository(
         if (!PasswordHasher.verifikasi(password, akun.password_hash, akun.salt)) {
             return HasilLogin.Gagal("Password salah.")
         }
+        if (akun.harus_ganti_sandi == 1) {
+            // Password baku bawaan APK — wajib diganti sebelum masuk.
+            return HasilLogin.ButuhPassword(akun.identitas, akun.nama, Role.dari(akun.role), wajibGanti = true)
+        }
         val sesi = SesiPengguna(akun.identitas, akun.nama, Role.dari(akun.role), akun.siswa_id)
         mulaiSesi(sesi)
         return HasilLogin.Sukses(sesi)
     }
 
-    /** Buat password untuk akun (setelah [HasilLogin.ButuhPassword]) lalu langsung login. */
+    /** Buat / ganti password untuk akun (setelah [HasilLogin.ButuhPassword]) lalu langsung login. */
     suspend fun buatPasswordLaluLogin(identitas: String, password: String): HasilLogin {
         if (password.length < 6) return HasilLogin.Gagal("Password minimal 6 karakter.")
         val id = identitas.trim().lowercase()
         val akun = akunDao.getByIdentitas(id) ?: return HasilLogin.Gagal("Akun tidak ditemukan.")
+        // Saat ganti password baku: password baru tidak boleh sama dengan yang lama.
+        if (akun.password_hash != null && PasswordHasher.verifikasi(password, akun.password_hash, akun.salt)) {
+            return HasilLogin.Gagal("Password baru harus berbeda dari password lama.")
+        }
         val h = PasswordHasher.hash(password)
         akunDao.setPassword(id, h.hashB64, h.saltB64, waktu())
         return loginPassword(id, password)

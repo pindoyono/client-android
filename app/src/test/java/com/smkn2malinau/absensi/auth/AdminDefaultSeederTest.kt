@@ -32,6 +32,7 @@ class AdminDefaultSeederTest {
         assertEquals("admin", akun.role)
         assertEquals("Mcnan", akun.nama)
         assertTrue(PasswordHasher.verifikasi("rahasia123", akun.password_hash, akun.salt))
+        assertEquals(1, akun.harus_ganti_sandi)  // password baku → wajib ganti saat login
     }
 
     @Test

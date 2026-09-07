@@ -25,7 +25,7 @@ interface AkunDao {
     @Query("UPDATE akun_lokal SET aktif = 0, diperbarui_pada = :waktu WHERE identitas = :identitas")
     suspend fun nonaktifkan(identitas: String, waktu: String)
 
-    @Query("UPDATE akun_lokal SET password_hash = :hash, salt = :salt, diperbarui_pada = :waktu WHERE identitas = :identitas")
+    @Query("UPDATE akun_lokal SET password_hash = :hash, salt = :salt, harus_ganti_sandi = 0, diperbarui_pada = :waktu WHERE identitas = :identitas")
     suspend fun setPassword(identitas: String, hash: String, salt: String, waktu: String)
 
     @Query("SELECT COUNT(*) FROM akun_lokal WHERE role = 'admin' AND aktif = 1")

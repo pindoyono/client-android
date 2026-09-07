@@ -84,8 +84,11 @@ class LoginViewModel(
                 is HasilLogin.ButuhPassword ->
                     _uiState.update {
                         it.copy(
-                            sibuk = false, butuhBuatPassword = true,
-                            pesan = "Akun ${h.nama} (${h.role.label}) belum punya password offline. Buat sekarang.",
+                            sibuk = false, butuhBuatPassword = true, password = "",
+                            pesan = if (h.wajibGanti)
+                                "Akun ${h.nama} masih pakai password bawaan. Buat password baru sekarang."
+                            else
+                                "Akun ${h.nama} (${h.role.label}) belum punya password offline. Buat sekarang.",
                             pesanError = false,
                         )
                     }
@@ -114,7 +117,14 @@ class LoginViewModel(
             }
             is HasilLogin.Gagal -> gagal(hasil.pesan)
             is HasilLogin.ButuhPassword ->
-                _uiState.update { it.copy(sibuk = false, butuhBuatPassword = true, pesan = "Buat password offline.", pesanError = false) }
+                _uiState.update {
+                    it.copy(
+                        sibuk = false, butuhBuatPassword = true, password = "",
+                        pesan = if (hasil.wajibGanti) "Buat password baru (bukan password bawaan)."
+                        else "Buat password offline.",
+                        pesanError = false,
+                    )
+                }
         }
     }
 

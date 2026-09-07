@@ -24,8 +24,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Naikkan tiap rilis supaya device kiosk mengenali APK baru sebagai update.
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -93,12 +93,29 @@ android {
         release {
             // null bila keystore belum dikonfigurasi → APK tidak ditandatangani.
             signingConfig = signingConfigs.findByName("release")
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // R8/minify DIMATIKAN dengan sengaja: APK ini ~200MB, mayoritas
+            // native lib (ONNX Runtime, ML Kit, SQLCipher) + model ML yang
+            // TIDAK bisa di-shrink R8. Penghematan kode Java cuma ~5-10MB,
+            // tidak sebanding risiko crash HANYA-di-release kalau aturan
+            // keep proguard (SQLCipher/Gson JNI & reflection) kurang lengkap.
+            // Kecilkan ukuran lewat ABI split di bawah, bukan R8.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    // Pisah APK per arsitektur CPU — kiosk hardware modern = arm64-v8a.
+    // Universal APK tetap dibuat sebagai fallback (jalan di semua device).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = true
         }
     }
 
@@ -152,7 +169,6 @@ dependencies {
     // Retrofit + OkHttp (PRD bagian 4 & 8)
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // Google Sign-In via Credential Manager (registrasi device — setara OAuth Windows)
     implementation("androidx.credentials:credentials:1.3.0")
