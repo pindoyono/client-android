@@ -19,6 +19,8 @@ class SyncRepositoryImpl(private val db: AbsensiDatabase) : SyncRepository {
     override suspend fun deleteSiswa(siswaId: Int) = db.siswaDao().deleteSiswa(siswaId)
     override suspend fun insertEmbedding(embedding: EmbeddingCache) = db.siswaDao().insertEmbedding(listOf(embedding))
     override suspend fun deleteEmbedding(siswaId: Int) = db.siswaDao().deleteEmbedding(siswaId)
+    override suspend fun hapusEmbeddingTidakDiServer(idServer: Collection<Int>) =
+        db.siswaDao().hapusEmbeddingTidakDiServer(idServer)
     override suspend fun hapusEnrollLokalTertimpa() {
         db.siswaDao().hapusEmbeddingEnrollLokalTertimpa()
         db.siswaDao().hapusSiswaEnrollLokalTertimpa()
@@ -62,7 +64,12 @@ class SyncRepositoryImpl(private val db: AbsensiDatabase) : SyncRepository {
     override suspend fun seedSiswaRoster(siswa: List<SiswaRosterDto>) {
         if (siswa.isEmpty()) return
         val siswaDao = db.siswaDao()
-        siswaDao.insertSiswa(siswa.map { SiswaCache(siswa_id = it.id, nis = it.nis, nama = it.nama, kelas = it.kelas) })
+        siswaDao.insertSiswa(siswa.map {
+            SiswaCache(
+                siswa_id = it.id, nis = it.nis, nama = it.nama, kelas = it.kelas,
+                enroll_mandiri_pending = if (it.enrollMandiriPending) 1 else 0,
+            )
+        })
         db.akunDao().seedAkunSiswaDariRoster(siswa)
         // Buang baris versi-server (id > 0) yang tak lagi ada di roster DAN belum
         // pernah enroll (tak punya embedding). Yang ber-embedding diurus

@@ -50,6 +50,7 @@ class SyncWorker(
                     KonfigLokasi(lat, lng, radius)
                 },
                 simpanNamaLokasi = { credentialManager.saveNamaLokasi(it) },
+                simpanIzinEnrollMandiri = { credentialManager.setIzinEnrollMandiri(it) },
             )
             val result = syncService.runSyncCycle()
 

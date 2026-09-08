@@ -322,6 +322,18 @@ class KioskViewModel(
             return
         }
 
+        // Daftar wajah mandiri belum diverifikasi admin → dikenali tapi belum bisa absen.
+        if (match.menungguVerifikasi) {
+            tampilkan(
+                HasilScan(
+                    StatusHasil.DITOLAK_BELUM_WAKTUNYA,
+                    nama = match.nama, kelas = match.kelas, nis = match.nis,
+                    pesan = "Pendaftaran wajah menunggu verifikasi admin — belum bisa absen",
+                )
+            )
+            return
+        }
+
         val tanggal = tanggalProvider().toString()
         val jadwal = repo.jadwalEfektif(match.kelas, tanggal)
         if (jadwal == null) {

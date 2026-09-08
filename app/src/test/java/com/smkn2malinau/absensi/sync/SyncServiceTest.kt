@@ -469,6 +469,7 @@ class SyncServiceTest {
         override suspend fun insertEmbedding(embedding: EmbeddingCache) { embeddings.add(embedding) }
         override suspend fun deleteEmbedding(siswaId: Int) { deletedEmbedding.add(siswaId) }
         override suspend fun hapusEnrollLokalTertimpa() { enrollLokalDibersihkan++ }
+        override suspend fun hapusEmbeddingTidakDiServer(idServer: Collection<Int>) {}
         override suspend fun insertDispensasi(dispensasi: DispensasiCache) { this.dispensasi.add(dispensasi) }
         override suspend fun gantiJadwalCache(jadwal: List<JadwalCache>) { this.jadwal.clear(); this.jadwal.addAll(jadwal) }
         override suspend fun daftarKelas() = kelas

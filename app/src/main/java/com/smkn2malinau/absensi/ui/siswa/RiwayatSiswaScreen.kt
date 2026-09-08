@@ -29,9 +29,17 @@ import kotlinx.coroutines.withContext
 /** Layar read-only untuk role siswa: riwayat absen masuk/pulang miliknya sendiri. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RiwayatSiswaScreen(sesi: SesiPengguna?, onTutup: () -> Unit) {
+fun RiwayatSiswaScreen(
+    sesi: SesiPengguna?,
+    onTutup: () -> Unit,
+    onDaftarWajah: () -> Unit = {},
+) {
     val context = LocalContext.current
     val siswaId = sesi?.siswaId
+    // Tombol daftar wajah hanya muncul di device yang diizinkan admin (dari sync /health).
+    val bolehDaftarWajah = remember {
+        CredentialManager(context).izinEnrollMandiri() && (sesi?.siswaId ?: -1) > 0
+    }
     var records by remember { mutableStateOf<List<AbsensiLokal>?>(null) }
     val gantiPasswordVm: GantiPasswordViewModel =
         viewModel(factory = GantiPasswordViewModel.Factory(context))
@@ -78,6 +86,25 @@ fun RiwayatSiswaScreen(sesi: SesiPengguna?, onTutup: () -> Unit) {
                 sesi?.nama ?: "-",
                 style = MaterialTheme.typography.titleMedium,
             )
+
+            if (bolehDaftarWajah) {
+                Surface(
+                    onClick = onDaftarWajah,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(Spasi.md)) {
+                        Text("Daftar Wajah Saya", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Daftarkan / perbarui wajahmu untuk absensi. Perlu diverifikasi admin dulu.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+
             when {
                 records == null -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                 siswaId == null -> Text(

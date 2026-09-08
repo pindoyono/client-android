@@ -28,9 +28,10 @@ import com.smkn2malinau.absensi.ui.EnrollmentScreen
 import com.smkn2malinau.absensi.ui.admin.AdminPanelScreen
 import com.smkn2malinau.absensi.ui.auth.LoginScreen
 import com.smkn2malinau.absensi.ui.siswa.RiwayatSiswaScreen
+import com.smkn2malinau.absensi.ui.siswa.DaftarWajahSayaScreen
 import com.smkn2malinau.absensi.ui.theme.AbsensiTheme
 
-private enum class Layar { SETUP, KIOSK, ENROLLMENT, LOGIN, PANEL_ADMIN, RIWAYAT_SISWA }
+private enum class Layar { SETUP, KIOSK, ENROLLMENT, LOGIN, PANEL_ADMIN, RIWAYAT_SISWA, DAFTAR_WAJAH_SAYA }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,6 +95,11 @@ class MainActivity : ComponentActivity() {
                             onTutup = {
                                 credentialManager.clearSesi(); sesi = null; layar = Layar.KIOSK
                             },
+                            onDaftarWajah = { layar = Layar.DAFTAR_WAJAH_SAYA },
+                        )
+                        Layar.DAFTAR_WAJAH_SAYA -> DaftarWajahSayaScreen(
+                            sesi = sesi,
+                            onTutup = { layar = Layar.RIWAYAT_SISWA },
                         )
                     }
                 }

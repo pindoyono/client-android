@@ -37,6 +37,7 @@ class CredentialManager(context: Context) {
     private val PREF_LOKASI_REF_LNG = "lokasi_ref_lng"
     private val PREF_LOKASI_REF_RADIUS = "lokasi_ref_radius_meter"
     private val PREF_NAMA_LOKASI = "nama_lokasi"
+    private val PREF_IZIN_ENROLL_MANDIRI = "izin_enroll_mandiri"
     private val PREF_ADMIN_NAMA = "admin_nama"
     private val PREF_ADMIN_ROLE = "admin_role"
     private val PREF_PIN = "admin_pin_enc"
@@ -103,6 +104,11 @@ class CredentialManager(context: Context) {
 
     fun saveNamaLokasi(nama: String) = prefs.edit().putString(PREF_NAMA_LOKASI, nama).apply()
     fun getNamaLokasi(): String = prefs.getString(PREF_NAMA_LOKASI, "") ?: ""
+
+    /** Device ini diizinkan admin untuk siswa daftar wajah sendiri (dari
+     *  response POST /device/{id}/health tiap sync). Default false. */
+    fun setIzinEnrollMandiri(izin: Boolean) = prefs.edit().putBoolean(PREF_IZIN_ENROLL_MANDIRI, izin).apply()
+    fun izinEnrollMandiri(): Boolean = prefs.getBoolean(PREF_IZIN_ENROLL_MANDIRI, false)
 
     fun saveAdminInfo(nama: String?, role: String?) {
         prefs.edit()

@@ -37,6 +37,12 @@ interface SiswaDao {
     @Query("DELETE FROM embedding_cache WHERE siswa_id = :siswaId")
     suspend fun deleteEmbedding(siswaId: Int)
 
+    /** Buang embedding versi-server (id > 0) yang tidak ada di daftar server terbaru
+     *  (mis. admin menolak daftar wajah mandiri, atau menghapus enroll). Enroll
+     *  lokal (id < 0) tidak disentuh. */
+    @Query("DELETE FROM embedding_cache WHERE siswa_id > 0 AND siswa_id NOT IN (:idServer)")
+    suspend fun hapusEmbeddingTidakDiServer(idServer: Collection<Int>)
+
     @Query("SELECT COUNT(*) FROM siswa_cache")
     suspend fun countSiswa(): Int
 

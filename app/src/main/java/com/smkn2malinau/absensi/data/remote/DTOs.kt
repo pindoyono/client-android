@@ -54,6 +54,9 @@ data class SiswaEmbeddingDto(
     @SerializedName("nama") val nama: String,
     @SerializedName("kelas") val kelas: String,
     @SerializedName("aktif") val aktif: Boolean = true,
+    /** true = siswa daftar wajah sendiri, menunggu verifikasi admin — cache
+     *  embedding-nya tapi TOLAK absensi sampai false. */
+    @SerializedName("enroll_mandiri_pending") val enrollMandiriPending: Boolean = false,
     /** Embedding terenkripsi, di-encode HEX oleh server (bukan base64). */
     @SerializedName("embedding_encrypted") val embeddingHex: String? = null,
     @SerializedName("model_version") val modelVersion: String = ""
@@ -70,6 +73,7 @@ data class SiswaRosterDto(
     @SerializedName("nama") val nama: String,
     @SerializedName("kelas") val kelas: String,
     @SerializedName("enrolled") val enrolled: Boolean = false,
+    @SerializedName("enroll_mandiri_pending") val enrollMandiriPending: Boolean = false,
 )
 
 /**
@@ -144,6 +148,8 @@ data class HealthReportResponse(
     /** Nilai TERKINI di server — kiosk pakai untuk menyegarkan metadata lokal tiap sync. */
     @SerializedName("nama_lokasi") val namaLokasi: String? = null,
     @SerializedName("platform") val platform: String? = null,
+    /** true = device ini diizinkan admin untuk siswa daftar wajah sendiri. */
+    @SerializedName("izin_enroll_mandiri") val izinEnrollMandiri: Boolean = false,
 )
 
 // --- Geofencing — POST /device/{id}/lokasi/cek ---
@@ -231,6 +237,11 @@ data class EnrollWajahRequest(
     /** Embedding ArcFace MENTAH (belum dienkripsi) — server yang mengenkripsi. */
     @SerializedName("embedding") val embedding: List<Float>,
     @SerializedName("model_version") val modelVersion: String,
+    /** true = siswa daftar SENDIRI (bukan operator). Server cek izin device +
+     *  set status "menunggu verifikasi admin". Wajib sertakan `fotoJpeg`. */
+    @SerializedName("mandiri") val mandiri: Boolean = false,
+    /** Foto capture (base64 JPEG) — bukti untuk admin verifikasi. Hanya saat mandiri. */
+    @SerializedName("foto_jpeg") val fotoJpeg: String? = null,
 )
 
 // --- Provisioning via QR — POST /device/claim ---

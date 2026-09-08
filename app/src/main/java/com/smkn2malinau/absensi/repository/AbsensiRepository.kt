@@ -120,6 +120,9 @@ data class SiswaCocok(
     val jarak: Float = Float.MAX_VALUE,
     /** Jumlah embedding yang berhasil didekripsi & dibandingkan (0 = key salah / cache kosong). */
     val jumlahDibandingkan: Int = 0,
+    /** true = siswa ini baru daftar wajah SENDIRI, menunggu verifikasi admin —
+     *  jangan simpan absensi, tampilkan pesan tunggu. */
+    val menungguVerifikasi: Boolean = false,
 )
 
 class AbsensiRepositoryImpl(
@@ -177,7 +180,8 @@ class AbsensiRepositoryImpl(
                     nis = s?.nis ?: "",
                     nama = s?.nama ?: "",
                     kelas = s?.kelas ?: "",
-                    jarak = jarak
+                    jarak = jarak,
+                    menungguVerifikasi = (s?.enroll_mandiri_pending ?: 0) == 1,
                 )
             }
         }

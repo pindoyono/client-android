@@ -20,6 +20,8 @@ interface SyncRepository {
     suspend fun insertEmbedding(embedding: EmbeddingCache)
     suspend fun deleteEmbedding(siswaId: Int)
     suspend fun hapusEnrollLokalTertimpa()
+    /** Buang embedding versi-server yang tak lagi ada di daftar server. */
+    suspend fun hapusEmbeddingTidakDiServer(idServer: Collection<Int>)
     suspend fun insertDispensasi(dispensasi: DispensasiCache)
     /** Ganti SELURUH cache jadwal dengan set baru (setara `replace_jadwal_cache` Windows). */
     suspend fun gantiJadwalCache(jadwal: List<JadwalCache>)
@@ -71,6 +73,8 @@ class SyncService(
     private val ambilKonfigLokasi: () -> KonfigLokasi = { KonfigLokasi(null, null, null) },
     /** Nama lokasi terkini dari server (response /health) — disimpan ke CredentialManager. */
     private val simpanNamaLokasi: (String) -> Unit = { },
+    /** Izin daftar wajah mandiri (response /health) — disimpan ke CredentialManager. */
+    private val simpanIzinEnrollMandiri: (Boolean) -> Unit = { },
 ) {
     private val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
 
@@ -129,6 +133,7 @@ class SyncService(
             val nowIso = LocalDateTime.now().format(fmt)
             val embeddingResponse = api.getEmbeddings(null)
             var adaSiswaServer = false
+            val idBerEmbeddingServer = mutableSetOf<Int>()
             for (dto in embeddingResponse.data) {
                 if (!dto.aktif) {
                     repo.deleteSiswa(dto.siswaId)
@@ -137,10 +142,14 @@ class SyncService(
                 }
                 adaSiswaServer = true
                 repo.insertSiswa(
-                    SiswaCache(siswa_id = dto.siswaId, nis = dto.nis, nama = dto.nama, kelas = dto.kelas)
+                    SiswaCache(
+                        siswa_id = dto.siswaId, nis = dto.nis, nama = dto.nama, kelas = dto.kelas,
+                        enroll_mandiri_pending = if (dto.enrollMandiriPending) 1 else 0,
+                    )
                 )
                 val bytes = dto.embeddingHex?.takeIf { it.isNotBlank() }?.let(::hexKeBytes)
                 if (bytes != null) {
+                    idBerEmbeddingServer.add(dto.siswaId)
                     repo.insertEmbedding(
                         EmbeddingCache(
                             siswa_id = dto.siswaId,
@@ -150,6 +159,12 @@ class SyncService(
                         )
                     )
                 }
+            }
+            // Embedding lokal (id server, positif) yang server sudah TIDAK punya
+            // → hapus (mis. admin menolak daftar wajah mandiri, atau hapus enroll).
+            // /embeddings/sync selalu full (diperbarui_sejak=null) jadi set ini autoritatif.
+            if (adaSiswaServer) {
+                repo.hapusEmbeddingTidakDiServer(idBerEmbeddingServer.ifEmpty { setOf(-1) })
             }
             // Enroll lokal (id negatif) yang NIS-nya kini ada di server → hapus,
             // supaya matching tidak dobel dengan baris versi server.
@@ -278,6 +293,7 @@ class SyncService(
                     )
                 )
                 h.namaLokasi?.trim()?.takeIf { it.isNotEmpty() }?.let(simpanNamaLokasi)
+                simpanIzinEnrollMandiri(h.izinEnrollMandiri)
             } catch (e: Exception) {
             }
 
