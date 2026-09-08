@@ -47,7 +47,7 @@ class MiniFasNetEngine(context: Context) : FaceEngine {
     /** Klasifikasi mata (untuk challenge kedip) hanya diaktifkan kalau admin menyalakannya —
      *  menambah sedikit beban ML Kit, jadi jangan default. */
     private val butuhKlasifikasiMata: Boolean =
-        runCatching { CredentialManager(appContext).getKedipWajib() }.getOrDefault(false)
+        runCatching { CredentialManager(appContext).getKedipWajib() }.getOrDefault(true)
 
     private val faceDetector: FaceDetector by lazy {
         FaceDetection.getClient(

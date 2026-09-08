@@ -47,10 +47,10 @@ data class AdminPanelUiState(
     val serverUrlDefault: String = "",
     val lensaDepan: Boolean = true,
     val faceKey: String = "",
-    val ambangJarak: Float = 0.3542f,
+    val ambangJarak: Float = 0.30f,
     /** Anti-spoof: frame liveness beruntun (1–5) + challenge kedip. */
     val livenessFrameMin: Int = 3,
-    val kedipWajib: Boolean = false,
+    val kedipWajib: Boolean = true,
 )
 
 class AdminPanelViewModel(

@@ -10,8 +10,9 @@ object LivenessEvaluator {
     /** Ambang skor liveness (kalibrasi Windows, perlu dikalibrasi ulang untuk Android). */
     const val AMBANG_LIVENESS_DEFAULT = 0.752f
 
-    /** Ambang *distance* face-matching (kalibrasi Windows, perlu dikalibrasi ulang). */
-    const val AMBANG_JARAK_DEFAULT = 0.3542f
+    /** Ambang *distance* face-matching. Default 0.30 (lebih ketat dari kalibrasi
+     *  Windows 0.3542). HARUS sama dengan CredentialManager.AMBANG_JARAK_DEFAULT. */
+    const val AMBANG_JARAK_DEFAULT = 0.30f
 
     /**
      * Evaluasi apakah wajah asli (real) atau spoof berdasarkan output liveness model.

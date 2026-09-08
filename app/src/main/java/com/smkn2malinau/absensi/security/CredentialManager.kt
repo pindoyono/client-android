@@ -234,12 +234,13 @@ class CredentialManager(context: Context) {
         prefs.edit().putInt(PREF_LIVENESS_FRAME_MIN, n.coerceIn(1, 5)).apply()
 
     /**
-     * Challenge kedip aktif (default false). Kalau true: setelah frame liveness
-     * cukup, kiosk minta 1 kedipan mata sebelum menyimpan absensi. Menambah
-     * beban ringan (klasifikasi mata ML Kit) — hanya kalau diaktifkan.
+     * Challenge kedip aktif (default TRUE). Setelah frame liveness cukup, kiosk
+     * minta 1 kedipan mata sebelum menyimpan absensi — anti-spoof foto/diam.
+     * Menambah beban ringan (klasifikasi mata ML Kit). Admin bisa mematikan di
+     * Panel Admin bila terlalu berat / lambat di device tertentu.
      */
     fun getKedipWajib(): Boolean =
-        prefs.getBoolean(PREF_LIVENESS_KEDIP, false)
+        prefs.getBoolean(PREF_LIVENESS_KEDIP, true)
 
     fun saveKedipWajib(aktif: Boolean) =
         prefs.edit().putBoolean(PREF_LIVENESS_KEDIP, aktif).apply()
@@ -467,8 +468,8 @@ class CredentialManager(context: Context) {
     private companion object {
         const val PIN_MAX_SALAH = 5
         const val PIN_KUNCI_DASAR_DTK = 30L
-        /** Sama dengan `LivenessEvaluator.AMBANG_JARAK_DEFAULT` (kalibrasi Windows). */
-        const val AMBANG_JARAK_DEFAULT = 0.3542f
+        /** Sama dengan `LivenessEvaluator.AMBANG_JARAK_DEFAULT`. */
+        const val AMBANG_JARAK_DEFAULT = 0.30f
         const val SESI_TTL_MS = 8L * 60 * 60 * 1000
     }
 }

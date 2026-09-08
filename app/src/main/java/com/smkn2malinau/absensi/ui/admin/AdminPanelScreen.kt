@@ -544,7 +544,7 @@ private fun PengaturanPane(
                 Slider(value = ambang, onValueChange = { ambang = it }, valueRange = 0.20f..0.80f, steps = 59)
                 Text(
                     "Lebih besar = lebih longgar (wajah asli tidak lagi 'tidak dikenali'). " +
-                        "Lebih kecil = lebih ketat. Default 0.35. Kartu 'Tidak dikenali' menampilkan jarak terdekat — pilih ambang sedikit di atasnya.",
+                        "Lebih kecil = lebih ketat. Default 0.30. Kartu 'Tidak dikenali' menampilkan jarak terdekat — pilih ambang sedikit di atasnya.",
                     style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkSoft,
                 )
                 Button(onClick = { onSaveAmbang(ambang) }, modifier = Modifier.align(Alignment.End)) { Text("Simpan Ambang") }
@@ -569,7 +569,7 @@ private fun PengaturanPane(
                     Column(Modifier.weight(1f)) {
                         Text("Wajibkan kedip mata", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Kiosk minta 1 kedipan sebelum absen. Menambah friksi + sedikit beban (klasifikasi mata ML Kit). Default mati.",
+                            "Kiosk minta 1 kedipan sebelum absen. Anti-spoof foto/diam. Menambah friksi + sedikit beban (klasifikasi mata ML Kit). Default AKTIF — matikan bila lambat di device tertentu.",
                             style = MaterialTheme.typography.bodySmall, color = AbsensiColors.InkSoft,
                         )
                     }
