@@ -27,7 +27,7 @@ data class AdminUiState(
     val emailAdmin: String = "",
     val passwordAdmin: String = "",
     val namaLokasi: String = "",
-    val modeTestingAktif: Boolean = true,
+    val modeTestingAktif: Boolean = false,  // default: mode produksi (lihat CredentialManager.isOnSiteTestingSelesai)
     val sedangProses: Boolean = false,
     val googleTersedia: Boolean = false,
     val pesan: String? = null,

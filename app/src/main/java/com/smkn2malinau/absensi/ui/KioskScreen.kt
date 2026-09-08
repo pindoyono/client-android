@@ -50,7 +50,9 @@ import com.smkn2malinau.absensi.ui.theme.Spasi
 data class KioskUiState(
     val statusJaringan: StatusJaringan = StatusJaringan.SINKRON_TERTUNDA,
     val jamSekarang: String = "14:32",
-    val onSiteTestingSelesai: Boolean = false,
+    // Default true = mode produksi (bukan testing). Nilai sebenarnya diisi
+    // KioskViewModel dari CredentialManager saat konstruksi.
+    val onSiteTestingSelesai: Boolean = true,
     val hasilTerakhir: HasilScan? = null,
     /** Status bar sinkronisasi + jam masuk/pulang — setara header kiosk Windows. */
     val ringkasanSync: RingkasanSyncUi? = null,

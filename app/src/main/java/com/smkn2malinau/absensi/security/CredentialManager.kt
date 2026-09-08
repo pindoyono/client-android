@@ -309,10 +309,13 @@ class CredentialManager(context: Context) {
     }
 
     /**
-     * Safety gate — PRD bagian 10.
+     * Safety gate — PRD bagian 10. Default `true` (mode testing TIDAK aktif):
+     * perangkat baru langsung mode produksi, absensi tersimpan. Admin bisa
+     * mencentang "Mode testing" di layar Setup bila memang perlu uji lapangan
+     * dulu (hasil scan tidak disimpan selama itu).
      */
     fun isOnSiteTestingSelesai(): Boolean =
-        prefs.getBoolean(PREF_ON_SITE_TESTING, false)
+        prefs.getBoolean(PREF_ON_SITE_TESTING, true)
 
     fun setOnSiteTestingSelesai(value: Boolean) {
         prefs.edit().putBoolean(PREF_ON_SITE_TESTING, value).apply()
