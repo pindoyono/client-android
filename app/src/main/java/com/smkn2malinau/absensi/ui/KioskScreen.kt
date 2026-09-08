@@ -141,6 +141,8 @@ fun KioskScreen(
     onOpenAdmin: () -> Unit = {},
     onSyncSekarang: () -> Unit = {},
     onPilihJadwalKelas: (String) -> Unit = {},
+    landscape: Boolean = false,
+    onToggleOrientasi: () -> Unit = {},
     cameraContent: @Composable () -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize().background(AbsensiColors.Bg)) {
@@ -161,7 +163,7 @@ fun KioskScreen(
         )
 
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            BarisAtas(state, onOpenAdmin, onSyncSekarang, onPilihJadwalKelas)
+            BarisAtas(state, onOpenAdmin, onSyncSekarang, onPilihJadwalKelas, landscape, onToggleOrientasi)
 
             if (!state.lokasiValid) {
                 Box(
@@ -216,6 +218,8 @@ private fun BarisAtas(
     onOpenAdmin: () -> Unit,
     onSyncSekarang: () -> Unit,
     onPilihJadwalKelas: (String) -> Unit = {},
+    landscape: Boolean = false,
+    onToggleOrientasi: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -261,6 +265,7 @@ private fun BarisAtas(
                 }
             }
             // KANAN — lebar natural, selalu terlihat.
+            TombolOrientasi(landscape, onToggleOrientasi)
             Text(
                 text = state.jamSekarang,
                 color = AbsensiColors.Ink,
@@ -402,6 +407,25 @@ private fun ChipJadwal(
                 }
             }
         }
+    }
+}
+
+/** Toggle orientasi layar kiosk. Default potrait; sekali klik → landscape & sebaliknya.
+ *  Tidak mempengaruhi kamera/deteksi wajah (frame selalu ditegakkan sebelum diproses). */
+@Composable
+private fun TombolOrientasi(landscape: Boolean, onToggle: () -> Unit) {
+    Surface(
+        color = AbsensiColors.Surface.copy(alpha = 0.7f),
+        contentColor = AbsensiColors.InkSoft,
+        shape = MaterialTheme.shapes.small,
+        border = androidx.compose.foundation.BorderStroke(1.dp, AbsensiColors.Border),
+        modifier = Modifier.clickable { onToggle() },
+    ) {
+        Text(
+            text = if (landscape) "⇋ Landscape" else "⇋ Potrait",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = Spasi.sm, vertical = 4.dp),
+        )
     }
 }
 

@@ -1,6 +1,7 @@
 package com.smkn2malinau.absensi
 
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -41,6 +42,14 @@ class MainActivity : ComponentActivity() {
                 mutableStateOf(if (credentialManager.hasCredentials()) Layar.KIOSK else Layar.SETUP)
             }
             var sesi by remember { mutableStateOf<SesiPengguna?>(null) }
+            // Landscape HANYA di layar kiosk (scan), dan hanya kalau admin memilihnya.
+            // Layar lain (setup/login/panel/enrollment) tetap potrait.
+            var kioskLandscape by remember { mutableStateOf(credentialManager.orientasiKioskLandscape()) }
+            LaunchedEffect(layar, kioskLandscape) {
+                requestedOrientation =
+                    if (layar == Layar.KIOSK && kioskLandscape) ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                    else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
 
             AbsensiTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -49,7 +58,14 @@ class MainActivity : ComponentActivity() {
                             onSaveSuccess = { layar = Layar.KIOSK },
                             onOpenEnrollment = { layar = Layar.ENROLLMENT },
                         )
-                        Layar.KIOSK -> KioskRoot(onOpenAdmin = { layar = Layar.LOGIN })
+                        Layar.KIOSK -> KioskRoot(
+                            onOpenAdmin = { layar = Layar.LOGIN },
+                            landscape = kioskLandscape,
+                            onToggleOrientasi = {
+                                kioskLandscape = !kioskLandscape
+                                credentialManager.setOrientasiKioskLandscape(kioskLandscape)
+                            },
+                        )
                         Layar.ENROLLMENT -> EnrollmentScreen(
                             onBack = { layar = if (credentialManager.hasCredentials()) Layar.KIOSK else Layar.SETUP },
                             onSelesai = { layar = Layar.KIOSK },
@@ -90,7 +106,11 @@ class MainActivity : ComponentActivity() {
  * Root kiosk — menyambungkan KioskViewModel ke KioskScreen + CameraView (PRD bagian 4).
  */
 @Composable
-private fun KioskRoot(onOpenAdmin: () -> Unit) {
+private fun KioskRoot(
+    onOpenAdmin: () -> Unit,
+    landscape: Boolean = false,
+    onToggleOrientasi: () -> Unit = {},
+) {
     val context = LocalContext.current
     val viewModel: KioskViewModel = viewModel(factory = KioskViewModelFactory(context))
     val state by viewModel.uiState.collectAsState()
@@ -146,6 +166,8 @@ private fun KioskRoot(onOpenAdmin: () -> Unit) {
         onOpenAdmin = onOpenAdmin,
         onSyncSekarang = viewModel::syncSekarang,
         onPilihJadwalKelas = viewModel::pilihJadwalKelas,
+        landscape = landscape,
+        onToggleOrientasi = onToggleOrientasi,
     ) {
         if (hasCameraPermission) {
             CameraView(

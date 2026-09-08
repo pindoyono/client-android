@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.util.Log
+import android.view.Surface
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -15,13 +16,17 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Komponen kamera menggunakan CameraX (PRD bagian 5).
@@ -38,7 +43,24 @@ fun CameraView(
     onFrameAnalysis: (ByteArray) -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
     val executor = remember { Executors.newSingleThreadExecutor() }
+    val analysisRef = remember { AtomicReference<ImageAnalysis?>() }
+
+    // Sinkronkan targetRotation ImageAnalysis dengan rotasi layar SAAT INI.
+    // `imageProxy.imageInfo.rotationDegrees` (dipakai rotateJpeg di bawah)
+    // dihitung relatif targetRotation ini — sehingga wajah SELALU ditegakkan
+    // ke orientasi dunia nyata sebelum deteksi ML Kit & embedding, baik kiosk
+    // mode potrait maupun landscape. Tanpa sinkron ini, frame landscape masuk
+    // miring: ML Kit gagal deteksi / crop miring → embedding tak cocok dengan
+    // enrollment. LocalConfiguration.current membuat blok ini re-run saat
+    // orientasi Activity berubah (Activity di-handle configChanges, tak recreate).
+    val configuration = LocalConfiguration.current
+    LaunchedEffect(configuration.orientation) {
+        val rot = runCatching { ContextCompat.getDisplayOrDefault(context).rotation }
+            .getOrDefault(Surface.ROTATION_0)
+        analysisRef.get()?.targetRotation = rot
+    }
 
     AndroidView(
         modifier = modifier,
@@ -60,8 +82,13 @@ fun CameraView(
 
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetRotation(
+                        runCatching { ContextCompat.getDisplayOrDefault(context).rotation }
+                            .getOrDefault(Surface.ROTATION_0)
+                    )
                     .build()
                     .also {
+                        analysisRef.set(it)
                         it.setAnalyzer(executor) { imageProxy ->
                             val rotasi = imageProxy.imageInfo.rotationDegrees
                             val jpeg = runCatching { imageProxy.toJpegBytes() }
@@ -91,7 +118,14 @@ fun CameraView(
             }, ContextCompat.getMainExecutor(context))
 
             previewView
-        }
+        },
+        // Jaring pengaman kalau orientasi berubah tepat saat kamera masih
+        // meng-inisialisasi (LaunchedEffect di atas dapat analysisRef null):
+        // update lagi tiap recompose.
+        update = { view ->
+            val rot = view.display?.rotation ?: Surface.ROTATION_0
+            analysisRef.get()?.targetRotation = rot
+        },
     )
 }
 

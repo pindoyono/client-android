@@ -44,6 +44,7 @@ class CredentialManager(context: Context) {
     private val PREF_PIN_KUNCI_SAMPAI = "admin_pin_kunci_sampai"
     private val PREF_SERVER_URL = "server_base_url"
     private val PREF_LENSA_KAMERA = "lensa_kamera" // "depan" | "belakang"
+    private val PREF_ORIENTASI_KIOSK = "orientasi_kiosk" // "potrait" (default) | "landscape"
     private val PREF_FACE_KEY = "face_encryption_key_enc"
     private val PREF_AMBANG_JARAK = "ambang_jarak_wajah"
     private val PREF_LIVENESS_FRAME_MIN = "liveness_frame_min"
@@ -180,6 +181,15 @@ class CredentialManager(context: Context) {
 
     /** true = kamera depan (default). */
     fun lensaKameraDepan(): Boolean = prefs.getString(PREF_LENSA_KAMERA, "depan") != "belakang"
+
+    /** Orientasi layar kiosk saat scan — false = potrait (default), true = landscape.
+     *  Tidak memengaruhi pembacaan wajah: CameraView selalu menegakkan frame ke
+     *  orientasi dunia nyata sebelum deteksi/embedding, jadi enrollment potrait
+     *  tetap cocok dengan scan landscape (dan sebaliknya). */
+    fun setOrientasiKioskLandscape(landscape: Boolean) =
+        prefs.edit().putString(PREF_ORIENTASI_KIOSK, if (landscape) "landscape" else "potrait").apply()
+
+    fun orientasiKioskLandscape(): Boolean = prefs.getString(PREF_ORIENTASI_KIOSK, "potrait") == "landscape"
 
     /**
      * Fernet key untuk embedding wajah (`FACE_ENCRYPTION_KEY` server). Runtime override
